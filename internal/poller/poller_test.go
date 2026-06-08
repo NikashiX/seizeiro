@@ -13,7 +13,7 @@ const (
 	testTimeout  = 100 * time.Millisecond
 )
 
-func TestPollImmediateSuccess(t *testing.T) {
+func TestPoll_ImmediateSuccess(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		var calls int
 		p := New(testInterval, testTimeout, func(ctx context.Context) Result[int] {
@@ -34,7 +34,7 @@ func TestPollImmediateSuccess(t *testing.T) {
 	})
 }
 
-func TestPollImmediateError(t *testing.T) {
+func TestPoll_ImmediateError(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		wantErr := errors.New("boom")
 		p := New(testInterval, testTimeout, func(ctx context.Context) Result[int] {
@@ -51,7 +51,7 @@ func TestPollImmediateError(t *testing.T) {
 	})
 }
 
-func TestPollSuccessAfterTicks(t *testing.T) {
+func TestPoll_SuccessAfterTicks(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		const wantCalls = 4
 		var calls int
@@ -76,7 +76,7 @@ func TestPollSuccessAfterTicks(t *testing.T) {
 	})
 }
 
-func TestPollErrorAfterTicks(t *testing.T) {
+func TestPoll_ErrorAfterTicks(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		wantErr := errors.New("late failure")
 		var calls int
@@ -98,7 +98,7 @@ func TestPollErrorAfterTicks(t *testing.T) {
 	})
 }
 
-func TestPollTimeout(t *testing.T) {
+func TestPoll_Timeout(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		p := New(testInterval, testTimeout, func(ctx context.Context) Result[int] {
 			return Result[int]{Done: false}
@@ -114,7 +114,7 @@ func TestPollTimeout(t *testing.T) {
 	})
 }
 
-func TestPollParentContextCancelled(t *testing.T) {
+func TestPoll_ParentContextCancelled(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 

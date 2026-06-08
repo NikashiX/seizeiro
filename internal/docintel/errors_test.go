@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-func TestStatusErrorRetryable(t *testing.T) {
+func TestStatusError_Retryable(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
