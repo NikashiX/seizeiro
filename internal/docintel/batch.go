@@ -145,6 +145,8 @@ func (c *Client) GetBatchResult(ctx context.Context, location string) (*BatchAna
 			return nil, err
 		}
 		return &op, nil
+	case http.StatusNotFound:
+		return nil, ErrOperationNotFound
 	default:
 		b, _ := io.ReadAll(res.Body)
 		return nil, &StatusError{StatusCode: res.StatusCode, Body: string(b)}

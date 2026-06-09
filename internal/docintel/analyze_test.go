@@ -112,7 +112,7 @@ func TestGetAnalyzeResult_Succeeded(t *testing.T) {
 	}
 }
 
-func TestGetAnalyzeResult_UnexpectedStatus(t *testing.T) {
+func TestGetAnalyzeResult_NotFound(t *testing.T) {
 	t.Parallel()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -123,11 +123,27 @@ func TestGetAnalyzeResult_UnexpectedStatus(t *testing.T) {
 	client := NewClient(srv.URL, "secret-key")
 
 	_, err := client.GetAnalyzeResult(t.Context(), srv.URL)
+	if !errors.Is(err, ErrOperationNotFound) {
+		t.Fatalf("error = %v, want ErrOperationNotFound", err)
+	}
+}
+
+func TestGetAnalyzeResult_UnexpectedStatus(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	client := NewClient(srv.URL, "secret-key")
+
+	_, err := client.GetAnalyzeResult(t.Context(), srv.URL)
 	statusErr, ok := errors.AsType[*StatusError](err)
 	if !ok {
 		t.Fatalf("error = %v, want *StatusError", err)
 	}
-	if statusErr.StatusCode != http.StatusNotFound {
-		t.Fatalf("StatusCode = %d, want %d", statusErr.StatusCode, http.StatusNotFound)
+	if statusErr.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("StatusCode = %d, want %d", statusErr.StatusCode, http.StatusInternalServerError)
 	}
 }

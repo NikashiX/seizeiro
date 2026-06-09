@@ -9,6 +9,9 @@ import (
 // ErrInvalidBatchRequest é retornado quando os parâmetros de uma análise em lote são inválidos.
 var ErrInvalidBatchRequest = errors.New("docintel: invalid batch request")
 
+// ErrOperationNotFound é retornado quando a operação consultada não existe mais.
+var ErrOperationNotFound = errors.New("docintel: operation not found")
+
 type AzureError struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`

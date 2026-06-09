@@ -73,6 +73,8 @@ func (c *Client) GetAnalyzeResult(ctx context.Context, location string) (*Analyz
 			return nil, err
 		}
 		return &op, nil
+	case http.StatusNotFound:
+		return nil, ErrOperationNotFound
 	default:
 		b, _ := io.ReadAll(res.Body)
 		return nil, &StatusError{StatusCode: res.StatusCode, Body: string(b)}
