@@ -22,7 +22,6 @@
 
 - Construtores se chamam `New` ou `New<Tipo>` e retornam um ponteiro.
 - Variantes que entram em pânico ou falham em fatal usam o prefixo `Must`.
-- Dependências são recebidas como parâmetro, nunca criadas internamente.
 - Parâmetros agrupados usam structs nomeadas `<Verbo><Substantivo>Params`.
 
 ## Configuração
