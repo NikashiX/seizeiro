@@ -77,8 +77,8 @@ func NewTestInstance() (*TestInstance, error) {
 	}
 
 	resource, err := pool.Run(ctx,
-		"postgres",
-		dockertest.WithTag("17-alpine"),
+		"pgvector/pgvector",
+		dockertest.WithTag("pg16"),
 		dockertest.WithEnv([]string{
 			"POSTGRES_USER=" + testUser,
 			"POSTGRES_PASSWORD=" + testPassword,

@@ -6,7 +6,36 @@ package postgres
 
 import (
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/pgvector/pgvector-go"
 )
+
+type Arquivo struct {
+	ID           int64
+	HashSHA256   []byte
+	ChaveStorage string
+	MimeType     string
+	TamanhoBytes int64
+	CriadoEm     pgtype.Timestamptz
+}
+
+type ArquivoConteudo struct {
+	ID        int64
+	ArquivoID int64
+	Metodo    string
+	Formato   string
+	Conteudo  string
+	CriadoEm  pgtype.Timestamptz
+}
+
+type ArquivoConteudoChunk struct {
+	ID         int64
+	ConteudoID int64
+	Indice     int32
+	Conteudo   string
+	Tokens     pgtype.Int4
+	Embedding  pgvector.Vector
+	CriadoEm   pgtype.Timestamptz
+}
 
 type Token struct {
 	Hash      []byte

@@ -10,3 +10,6 @@ sql:
         sql_package: "pgx/v5"
         rename:
           cpf: CPF
+          hash_sha256: HashSHA256
+          arquivos_conteudo: ArquivoConteudo
+          arquivos_conteudo_chunk: ArquivoConteudoChunk
