@@ -15,8 +15,18 @@ VALUES ($1, $2, $3, $4, $5);
 -- name: GetArquivo :one
 SELECT * FROM arquivos WHERE id = $1;
 
+-- name: GetArquivoByHashSHA256 :one
+SELECT * FROM arquivos WHERE hash_sha256 = $1;
+
+-- name: GetArquivoConteudo :one
+SELECT *
+FROM arquivos_conteudo
+WHERE arquivo_id = $1
+AND metodo = $2;
+
 -- name: GetArquivoConteudoLatest :one
-SELECT * FROM arquivos_conteudo
+SELECT *
+FROM arquivos_conteudo
 WHERE arquivo_id = $1
 ORDER BY criado_em DESC
 LIMIT 1;

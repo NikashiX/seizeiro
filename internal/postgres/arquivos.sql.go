@@ -30,8 +30,53 @@ func (q *Queries) GetArquivo(ctx context.Context, id int64) (Arquivo, error) {
 	return i, err
 }
 
+const getArquivoByHashSHA256 = `-- name: GetArquivoByHashSHA256 :one
+SELECT id, hash_sha256, chave_storage, mime_type, tamanho_bytes, criado_em FROM arquivos WHERE hash_sha256 = $1
+`
+
+func (q *Queries) GetArquivoByHashSHA256(ctx context.Context, hashSha256 []byte) (Arquivo, error) {
+	row := q.db.QueryRow(ctx, getArquivoByHashSHA256, hashSha256)
+	var i Arquivo
+	err := row.Scan(
+		&i.ID,
+		&i.HashSHA256,
+		&i.ChaveStorage,
+		&i.MimeType,
+		&i.TamanhoBytes,
+		&i.CriadoEm,
+	)
+	return i, err
+}
+
+const getArquivoConteudo = `-- name: GetArquivoConteudo :one
+SELECT id, arquivo_id, metodo, formato, conteudo, criado_em
+FROM arquivos_conteudo
+WHERE arquivo_id = $1
+AND metodo = $2
+`
+
+type GetArquivoConteudoParams struct {
+	ArquivoID int64
+	Metodo    string
+}
+
+func (q *Queries) GetArquivoConteudo(ctx context.Context, arg GetArquivoConteudoParams) (ArquivoConteudo, error) {
+	row := q.db.QueryRow(ctx, getArquivoConteudo, arg.ArquivoID, arg.Metodo)
+	var i ArquivoConteudo
+	err := row.Scan(
+		&i.ID,
+		&i.ArquivoID,
+		&i.Metodo,
+		&i.Formato,
+		&i.Conteudo,
+		&i.CriadoEm,
+	)
+	return i, err
+}
+
 const getArquivoConteudoLatest = `-- name: GetArquivoConteudoLatest :one
-SELECT id, arquivo_id, metodo, formato, conteudo, criado_em FROM arquivos_conteudo
+SELECT id, arquivo_id, metodo, formato, conteudo, criado_em
+FROM arquivos_conteudo
 WHERE arquivo_id = $1
 ORDER BY criado_em DESC
 LIMIT 1
