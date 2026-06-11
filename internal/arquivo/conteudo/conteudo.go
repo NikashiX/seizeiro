@@ -20,10 +20,13 @@ import (
 	"github.com/automatiza-mg/seizeiro/internal/blob"
 	"github.com/automatiza-mg/seizeiro/internal/database"
 	"github.com/automatiza-mg/seizeiro/internal/docintel"
+	"github.com/automatiza-mg/seizeiro/internal/llm"
 	"github.com/automatiza-mg/seizeiro/internal/markdown"
 	"github.com/automatiza-mg/seizeiro/internal/postgres"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/pgvector/pgvector-go"
+	"github.com/riverqueue/river"
 )
 
 const (
@@ -46,19 +49,26 @@ type OCR interface {
 // Garante que o cliente da Azure Document Intelligence implementa OCR.
 var _ OCR = (*docintel.Client)(nil)
 
+// ErrNotFound é retornado quando o conteúdo não existe.
+var ErrNotFound = errors.New("conteudo: not found")
+
 type Service struct {
-	pool    *pgxpool.Pool
-	q       *postgres.Queries
-	ocr     OCR
-	storage blob.Storage
+	pool     *pgxpool.Pool
+	q        *postgres.Queries
+	ocr      OCR
+	storage  blob.Storage
+	embedder llm.Embedder
+	river    *river.Client[pgx.Tx]
 }
 
-func NewService(pool *pgxpool.Pool, ocr OCR, storage blob.Storage) *Service {
+func NewService(pool *pgxpool.Pool, ocr OCR, storage blob.Storage, embedder llm.Embedder, river *river.Client[pgx.Tx]) *Service {
 	return &Service{
-		pool:    pool,
-		q:       postgres.New(pool),
-		ocr:     ocr,
-		storage: storage,
+		pool:     pool,
+		q:        postgres.New(pool),
+		ocr:      ocr,
+		storage:  storage,
+		embedder: embedder,
+		river:    river,
 	}
 }
 
@@ -135,7 +145,15 @@ func (s *Service) ExtractConteudo(ctx context.Context, arquivoID int64) error {
 		}
 	}
 
-	_, err = s.q.SaveArquivoConteudo(ctx, postgres.SaveArquivoConteudoParams{
+	// Salva o conteúdo e enfileira o chunking na mesma transação: a task de
+	// chunking existe se, e somente se, o conteúdo foi persistido.
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	saved, err := s.q.WithTx(tx).SaveArquivoConteudo(ctx, postgres.SaveArquivoConteudoParams{
 		ArquivoID: arquivoID,
 		Metodo:    method,
 		Formato:   format,
@@ -148,5 +166,76 @@ func (s *Service) ExtractConteudo(ctx context.Context, arquivoID int64) error {
 		return fmt.Errorf("save arquivo conteudo: %w", err)
 	}
 
-	return nil
+	_, err = s.river.InsertTx(ctx, tx, arquivo.ChunkArgs{ConteudoID: saved.ID}, nil)
+	if err != nil {
+		return fmt.Errorf("insert chunk task: %w", err)
+	}
+
+	return tx.Commit(ctx)
+}
+
+// ChunkConteudo divide o conteúdo extraído de um arquivo em chunks, gera os
+// embeddings de cada chunk e os persiste em arquivos_conteudo_chunks. É
+// idempotente: caso o conteúdo já possua chunks, retorna nil sem reprocessar.
+//
+// Retorna [ErrNotFound] caso o conteúdo não exista.
+func (s *Service) ChunkConteudo(ctx context.Context, conteudoID int64) error {
+	row, err := s.q.GetArquivoConteudoByID(ctx, conteudoID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("get conteudo: %w", err)
+	}
+
+	// Evita reprocessar (e pagar por) embeddings já gerados.
+	count, err := s.q.CountArquivoConteudoChunks(ctx, conteudoID)
+	if err != nil {
+		return fmt.Errorf("count chunks: %w", err)
+	}
+	if count > 0 {
+		return nil
+	}
+
+	chunks, err := splitText(row.Conteudo, row.Formato)
+	if err != nil {
+		return fmt.Errorf("split text: %w", err)
+	}
+	if len(chunks) == 0 {
+		return nil
+	}
+
+	embeddings, err := s.embedder.EmbedDocuments(ctx, chunks)
+	if err != nil {
+		return fmt.Errorf("embed documents: %w", err)
+	}
+	if len(embeddings) != len(chunks) {
+		return fmt.Errorf("expected %d embeddings, got %d", len(chunks), len(embeddings))
+	}
+
+	// Persiste todos os chunks em uma única transação: em caso de falha
+	// parcial, nenhum chunk fica visível e o retry recomeça do zero.
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	qtx := s.q.WithTx(tx)
+	for i, chunk := range chunks {
+		err := qtx.SaveArquivoConteudoChunk(ctx, postgres.SaveArquivoConteudoChunkParams{
+			ConteudoID: conteudoID,
+			Indice:     int32(i),
+			Conteudo:   chunk,
+			Embedding:  pgvector.NewVector(embeddings[i]),
+		})
+		if err != nil {
+			if database.IsUniqueError(err, "arquivos_conteudo_chunks_conteudo_id_indice_key") {
+				return nil
+			}
+			return fmt.Errorf("save chunk %d: %w", i, err)
+		}
+	}
+
+	return tx.Commit(ctx)
 }

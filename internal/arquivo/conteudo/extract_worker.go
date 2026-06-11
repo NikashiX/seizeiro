@@ -7,6 +7,7 @@ import (
 
 	"github.com/automatiza-mg/seizeiro/internal/arquivo"
 	"github.com/automatiza-mg/seizeiro/internal/docintel"
+	"github.com/automatiza-mg/seizeiro/internal/llm"
 	"github.com/riverqueue/river"
 )
 
@@ -36,7 +37,7 @@ func (w *ExtractConteudoWorker) Timeout(*river.Job[arquivo.ExtractArgs]) time.Du
 func (w *ExtractConteudoWorker) Work(ctx context.Context, job *river.Job[arquivo.ExtractArgs]) error {
 	err := w.extractor.ExtractConteudo(ctx, job.Args.ArquivoID)
 	if err != nil {
-		if isPermanent(err) {
+		if isPermanentError(err) {
 			return river.JobCancel(err)
 		}
 		return err
@@ -45,9 +46,17 @@ func (w *ExtractConteudoWorker) Work(ctx context.Context, job *river.Job[arquivo
 }
 
 // Indica se o erro nunca será resolvido com uma nova tentativa.
-func isPermanent(err error) bool {
+func isPermanentError(err error) bool {
 	// O arquivo não existe mais.
 	if errors.Is(err, arquivo.ErrNotFound) {
+		return true
+	}
+	// O conteúdo não existe mais.
+	if errors.Is(err, ErrNotFound) {
+		return true
+	}
+	// A dimensão do embedding não casa com o schema do banco (VECTOR(1536)).
+	if _, ok := errors.AsType[*llm.DimensionMismatchError](err); ok {
 		return true
 	}
 	// Não há método de extração para o MIME resolvido.

@@ -6,15 +6,18 @@ import (
 
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
+	"golang.org/x/sync/errgroup"
 )
 
-const defaultBatchSize = 256
+const (
+	defaultBatchSize = 256
+	// maxConcurrentBatches limita o número de lotes processados em paralelo.
+	maxConcurrentBatches = 3
+)
 
 var _ Embedder = (*OpenAIEmbedder)(nil)
 
 // OpenAIEmbedder é um [Embedder] que gera embeddings usando a API da OpenAI.
-//
-// Os textos são enviados em lotes de no máximo batchSize por requisição.
 type OpenAIEmbedder struct {
 	client     openai.Client
 	model      string
@@ -34,8 +37,7 @@ type OpenAIParams struct {
 	// BatchSize limita a quantidade de textos por requisição. Quando zero, usa um
 	// valor padrão.
 	BatchSize int
-	// BaseURL sobrescreve a URL base da API, útil para testes. Opcional.
-	BaseURL string
+	BaseURL   string
 }
 
 // Valida os parâmetros de forma defensiva, retornando [ErrInvalidEmbedderConfig]
@@ -82,7 +84,8 @@ func NewOpenAIEmbedder(params OpenAIParams) (*OpenAIEmbedder, error) {
 
 // EmbedDocuments gera um embedding para cada texto, preservando a ordem de entrada.
 //
-// Os textos são enviados em lotes para reduzir o número de requisições. Retorna
+// Os textos são enviados em lotes para reduzir o número de requisições, e os lotes
+// são processados em paralelo (até [maxConcurrentBatches] simultâneos). Retorna
 // [*DimensionMismatchError] caso algum embedding tenha dimensão diferente da configurada.
 func (e *OpenAIEmbedder) EmbedDocuments(ctx context.Context, texts []string) ([][]float32, error) {
 	if len(texts) == 0 {
@@ -90,13 +93,24 @@ func (e *OpenAIEmbedder) EmbedDocuments(ctx context.Context, texts []string) ([]
 	}
 
 	result := make([][]float32, len(texts))
+
+	g, ctx := errgroup.WithContext(ctx)
+	g.SetLimit(maxConcurrentBatches)
+
 	for start := 0; start < len(texts); start += e.batchSize {
 		end := min(start+e.batchSize, len(texts))
+		// Cada lote grava em uma fatia disjunta de result, sem sobreposição,
+		// então as escritas concorrentes são seguras.
 		batch := texts[start:end]
+		dst := result[start:end]
 
-		if err := e.embedBatch(ctx, batch, result[start:end]); err != nil {
-			return nil, err
-		}
+		g.Go(func() error {
+			return e.embedBatch(ctx, batch, dst)
+		})
+	}
+
+	if err := g.Wait(); err != nil {
+		return nil, err
 	}
 
 	return result, nil

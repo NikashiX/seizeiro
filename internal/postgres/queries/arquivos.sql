@@ -24,6 +24,12 @@ FROM arquivos_conteudo
 WHERE arquivo_id = $1
 AND metodo = $2;
 
+-- name: GetArquivoConteudoByID :one
+SELECT * FROM arquivos_conteudo WHERE id = $1;
+
+-- name: CountArquivoConteudoChunks :one
+SELECT COUNT(*) FROM arquivos_conteudo_chunks WHERE conteudo_id = $1;
+
 -- name: GetArquivoConteudoLatest :one
 SELECT *
 FROM arquivos_conteudo

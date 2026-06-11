@@ -58,11 +58,38 @@ func (f *fakeOCR) PollResult(ctx context.Context, location string) (string, erro
 	return f.text, nil
 }
 
+// fakeEmbedder implementa llm.Embedder para testes, sem chamadas externas.
+type fakeEmbedder struct {
+	dims  int
+	err   error
+	calls int
+}
+
+func (f *fakeEmbedder) EmbedDocuments(ctx context.Context, texts []string) ([][]float32, error) {
+	f.calls++
+	if f.err != nil {
+		return nil, f.err
+	}
+	embeddings := make([][]float32, len(texts))
+	for i := range texts {
+		embeddings[i] = make([]float32, f.dims)
+	}
+	return embeddings, nil
+}
+
+func (f *fakeEmbedder) EmbedQuery(ctx context.Context, text string) ([]float32, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return make([]float32, f.dims), nil
+}
+
 type fixture struct {
 	pool     *pgxpool.Pool
 	service  *Service
 	arquivos *arquivo.Service
 	ocr      *fakeOCR
+	embedder *fakeEmbedder
 }
 
 func newFixture(tb testing.TB) *fixture {
@@ -74,6 +101,8 @@ func newFixture(tb testing.TB) *fixture {
 		tb.Fatal(err)
 	}
 	ocr := &fakeOCR{text: "# Documento\n\nTexto extraído via OCR."}
+	// 1536 dimensões para casar com o schema VECTOR(1536).
+	embedder := &fakeEmbedder{dims: 1536}
 
 	// Client insert-only: sem workers nem queues, apenas para enfileirar tasks.
 	riverClient, err := river.NewClient(riverpgxv5.New(pool), &river.Config{})
@@ -83,9 +112,10 @@ func newFixture(tb testing.TB) *fixture {
 
 	return &fixture{
 		pool:     pool,
-		service:  NewService(pool, ocr, storage),
+		service:  NewService(pool, ocr, storage, embedder, riverClient),
 		arquivos: arquivo.NewService(pool, storage, riverClient),
 		ocr:      ocr,
+		embedder: embedder,
 	}
 }
 

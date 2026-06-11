@@ -12,6 +12,17 @@ import (
 	"github.com/pgvector/pgvector-go"
 )
 
+const countArquivoConteudoChunks = `-- name: CountArquivoConteudoChunks :one
+SELECT COUNT(*) FROM arquivos_conteudo_chunks WHERE conteudo_id = $1
+`
+
+func (q *Queries) CountArquivoConteudoChunks(ctx context.Context, conteudoID int64) (int64, error) {
+	row := q.db.QueryRow(ctx, countArquivoConteudoChunks, conteudoID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const getArquivo = `-- name: GetArquivo :one
 SELECT id, hash_sha256, chave_storage, mime_type, tamanho_bytes, criado_em FROM arquivos WHERE id = $1
 `
@@ -62,6 +73,24 @@ type GetArquivoConteudoParams struct {
 
 func (q *Queries) GetArquivoConteudo(ctx context.Context, arg GetArquivoConteudoParams) (ArquivoConteudo, error) {
 	row := q.db.QueryRow(ctx, getArquivoConteudo, arg.ArquivoID, arg.Metodo)
+	var i ArquivoConteudo
+	err := row.Scan(
+		&i.ID,
+		&i.ArquivoID,
+		&i.Metodo,
+		&i.Formato,
+		&i.Conteudo,
+		&i.CriadoEm,
+	)
+	return i, err
+}
+
+const getArquivoConteudoByID = `-- name: GetArquivoConteudoByID :one
+SELECT id, arquivo_id, metodo, formato, conteudo, criado_em FROM arquivos_conteudo WHERE id = $1
+`
+
+func (q *Queries) GetArquivoConteudoByID(ctx context.Context, id int64) (ArquivoConteudo, error) {
+	row := q.db.QueryRow(ctx, getArquivoConteudoByID, id)
 	var i ArquivoConteudo
 	err := row.Scan(
 		&i.ID,

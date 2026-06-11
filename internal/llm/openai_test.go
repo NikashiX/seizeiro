@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -55,6 +56,10 @@ func TestNewOpenAIEmbedder_InvalidConfig(t *testing.T) {
 func fakeEmbeddingsServer(tb testing.TB, dims int, requests *[][]string) *httptest.Server {
 	tb.Helper()
 
+	// Os lotes são processados em paralelo, então o registro das requisições
+	// precisa ser sincronizado.
+	var mu sync.Mutex
+
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			Input []string `json:"input"`
@@ -63,7 +68,9 @@ func fakeEmbeddingsServer(tb testing.TB, dims int, requests *[][]string) *httpte
 			tb.Errorf("decode request: %v", err)
 		}
 		if requests != nil {
+			mu.Lock()
 			*requests = append(*requests, body.Input)
+			mu.Unlock()
 		}
 
 		type embedding struct {
@@ -134,6 +141,46 @@ func TestOpenAIEmbedder_EmbedDocuments_Batching(t *testing.T) {
 		{3, 0, 0},
 		{4, 0, 0},
 		{5, 0, 0},
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Fatalf("embeddings mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestOpenAIEmbedder_EmbedDocuments_ConcurrentBatches(t *testing.T) {
+	t.Parallel()
+
+	const dims = 3
+	var requests [][]string
+	srv := fakeEmbeddingsServer(t, dims, &requests)
+
+	emb, err := NewOpenAIEmbedder(OpenAIParams{
+		APIKey:     "secret",
+		Model:      "text-embedding-3-small",
+		Dimensions: dims,
+		BatchSize:  1,
+		BaseURL:    srv.URL,
+	})
+	if err != nil {
+		t.Fatalf("new embedder: %v", err)
+	}
+
+	// BatchSize 1 com 10 textos gera 10 lotes, mais que o limite de
+	// concorrência, exercitando o processamento paralelo e a ordenação.
+	texts := make([]string, 10)
+	want := make([][]float32, 10)
+	for i := range texts {
+		texts[i] = fmt.Sprintf("%d", i+1)
+		want[i] = []float32{float32(i + 1), 0, 0}
+	}
+
+	got, err := emb.EmbedDocuments(t.Context(), texts)
+	if err != nil {
+		t.Fatalf("embed documents: %v", err)
+	}
+
+	if len(requests) != len(texts) {
+		t.Fatalf("requests = %d, want %d", len(requests), len(texts))
 	}
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Fatalf("embeddings mismatch (-want +got):\n%s", diff)

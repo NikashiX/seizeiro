@@ -181,7 +181,7 @@ func TestIsPermanent(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			if got := isPermanent(tt.err); got != tt.want {
+			if got := isPermanentError(tt.err); got != tt.want {
 				t.Fatalf("isPermanent(%v) = %v, want %v", tt.err, got, tt.want)
 			}
 		})
