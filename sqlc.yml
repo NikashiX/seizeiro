@@ -13,3 +13,7 @@ sql:
           hash_sha256: HashSHA256
           arquivos_conteudo: ArquivoConteudo
           arquivos_conteudo_chunk: ArquivoConteudoChunk
+          tokens_chatbot: TokenChatbot
+          usuarios_chatbot: UsuarioChatbot
+          sei_usuario: SEIUsuario
+          sei_senha: SEISenha

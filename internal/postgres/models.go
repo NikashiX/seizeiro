@@ -44,6 +44,13 @@ type Token struct {
 	ExpiraEm  pgtype.Timestamptz
 }
 
+type TokenChatbot struct {
+	Hash         []byte
+	Plataforma   string
+	PlataformaID string
+	ExpiraEm     pgtype.Timestamptz
+}
+
 type Usuario struct {
 	ID              pgtype.UUID
 	Nome            string
@@ -53,4 +60,12 @@ type Usuario struct {
 	HashSenha       pgtype.Text
 	CriadoEm        pgtype.Timestamptz
 	AtualizadoEm    pgtype.Timestamptz
+}
+
+type UsuarioChatbot struct {
+	Plataforma   string
+	PlataformaID string
+	SEIUsuario   string
+	SEISenha     []byte
+	CriadoEm     pgtype.Timestamptz
 }
