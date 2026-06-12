@@ -76,6 +76,18 @@ sqlc se precisar adicionar novas queries.
 - Use os verbos `Save` (insert), `Get` (select) e `Update<Campo>` (update) ao
   nomear queries.
 
+### Nomes de Tabelas e Colunas
+
+- Tabelas usam substantivos do domínio em português, no plural (`usuarios`,
+  `arquivos`).
+- Colunas usam `snake_case` em português (`hash_senha`, `tamanho_bytes`).
+- Chaves estrangeiras usam o sufixo `_id` (`arquivo_id`, `conteudo_id`).
+- Timestamps padrão se chamam `criado_em` e `atualizado_em`.
+- Quando o identificador gerado pelo sqlc fica incorreto (siglas como `cpf` →
+  `Cpf`, ou structs no plural geradas de nomes de tabela), adicione uma entrada
+  ao mapa `rename:` em `sqlc.yml` (ex: `cpf: CPF`,
+  `arquivos_conteudo: ArquivoConteudo`) e rode `go tool sqlc generate`.
+
 ## Testes
 
 - Use apenas a `testing` da biblioteca padrão e `github.com/google/go-cmp/cmp`
@@ -88,6 +100,23 @@ sqlc se precisar adicionar novas queries.
 - Helpers recebem `testing.TB` e chamam `tb.Helper()`.
 - Testes de banco usam `TestMain` com `dockertest` e podem ser pulados com
   `-short` ou a variável de ambiente `SKIP_DATABASE_TESTS`.
+
+### Fixtures
+
+Pacotes com testes de banco seguem o padrão de fixture (ver `internal/auth` e
+`internal/arquivo/conteudo`):
+
+- Uma struct `fixture` no arquivo de teste principal (junto do `TestMain`)
+  agrupa o pool, o service em teste e os fakes das dependências.
+- `newFixture(tb testing.TB)` chama `tb.Helper()`, obtém um pool isolado via
+  `ti.NewPool(tb)` e injeta os fakes no construtor do service.
+- Dependências externas são substituídas por fakes locais (`fakeNotifier`,
+  `fakeOCR`) que implementam a interface sem chamadas externas e registram
+  chamadas e argumentos para asserções.
+- Helpers de cenário são métodos da fixture (ex: `createUsuario`,
+  `createArquivo`), recebem `tb testing.TB`, chamam `tb.Helper()` e falham com
+  `tb.Fatal` em caso de erro.
+- Cada teste começa com `f := newFixture(t)` logo após `t.Parallel()`.
 
 ## Documentação
 
