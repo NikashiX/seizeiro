@@ -11,18 +11,14 @@ import (
 
 func TestCreateUsuario(t *testing.T) {
 	t.Parallel()
-	service := newTestService(t)
+	f := newFixture(t)
 
-	params := CreateUsuarioParams{
+	usuario := f.createUsuario(t, CreateUsuarioParams{
 		Nome:  "Fulano da   Silva",
 		CPF:   "123.456.789-09",
 		Email: "Fulano.Silva@planejamento.mg.gov.br",
 		Senha: "Abc123123",
-	}
-	usuario, err := service.CreateUsuario(t.Context(), params)
-	if err != nil {
-		t.Fatal(err)
-	}
+	})
 
 	if want := "Fulano da Silva"; usuario.Nome != want {
 		t.Fatalf("want %q, got %q", want, usuario.Nome)
@@ -36,11 +32,22 @@ func TestCreateUsuario(t *testing.T) {
 	if usuario.HashSenha == nil {
 		t.Fatal("usuario should have a password")
 	}
+
+	// A notificação de ativação de conta deve ser enviada.
+	if f.notifier.calls != 1 {
+		t.Fatalf("want 1 notifier call, got %d", f.notifier.calls)
+	}
+	if f.notifier.emailAddress != usuario.Email {
+		t.Fatalf("want notification to %q, got %q", usuario.Email, f.notifier.emailAddress)
+	}
+	if f.notifier.token == "" {
+		t.Fatal("expected non-empty activation token")
+	}
 }
 
 func TestCreateUsuario_ErrEmailTaken(t *testing.T) {
 	t.Parallel()
-	service := newTestService(t)
+	f := newFixture(t)
 
 	params := CreateUsuarioParams{
 		Nome:  "Fulano da Silva",
@@ -48,13 +55,10 @@ func TestCreateUsuario_ErrEmailTaken(t *testing.T) {
 		Email: "fulano.silva@planejamento.mg.gov.br",
 		Senha: "Abc123123",
 	}
-	_, err := service.CreateUsuario(t.Context(), params)
-	if err != nil {
-		t.Fatal(err)
-	}
+	f.createUsuario(t, params)
 
 	params.CPF = "529.988.310-28"
-	_, err = service.CreateUsuario(t.Context(), params)
+	_, err := f.service.CreateUsuario(t.Context(), params)
 	if !errors.Is(err, ErrEmailTaken) {
 		t.Fatalf("expected ErrEmailTaken, got %v", err)
 	}
@@ -62,7 +66,7 @@ func TestCreateUsuario_ErrEmailTaken(t *testing.T) {
 
 func TestCreateUsuario_ErrCPFTaken(t *testing.T) {
 	t.Parallel()
-	service := newTestService(t)
+	f := newFixture(t)
 
 	params := CreateUsuarioParams{
 		Nome:  "Fulano da Silva",
@@ -70,13 +74,10 @@ func TestCreateUsuario_ErrCPFTaken(t *testing.T) {
 		Email: "fulano.silva@planejamento.mg.gov.br",
 		Senha: "Abc123123",
 	}
-	_, err := service.CreateUsuario(t.Context(), params)
-	if err != nil {
-		t.Fatal(err)
-	}
+	f.createUsuario(t, params)
 
 	params.Email = "fulano.silva2@planejamento.mg.gov.br"
-	_, err = service.CreateUsuario(t.Context(), params)
+	_, err := f.service.CreateUsuario(t.Context(), params)
 	if !errors.Is(err, ErrCPFTaken) {
 		t.Fatalf("expected ErrCPFTaken, got %v", err)
 	}
@@ -84,18 +85,15 @@ func TestCreateUsuario_ErrCPFTaken(t *testing.T) {
 
 func TestGetUsuario(t *testing.T) {
 	t.Parallel()
-	service := newTestService(t)
+	f := newFixture(t)
 
-	usuario, err := service.CreateUsuario(t.Context(), CreateUsuarioParams{
+	usuario := f.createUsuario(t, CreateUsuarioParams{
 		Nome:  "Fulano da Silva",
 		CPF:   "123.456.789-09",
 		Email: "fulano.silva@planejamento.mg.gov.br",
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
 
-	read, err := service.GetUsuario(t.Context(), usuario.ID)
+	read, err := f.service.GetUsuario(t.Context(), usuario.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,9 +104,9 @@ func TestGetUsuario(t *testing.T) {
 
 func TestGetUsuario_NotFound(t *testing.T) {
 	t.Parallel()
-	service := newTestService(t)
+	f := newFixture(t)
 
-	_, err := service.GetUsuario(t.Context(), uuid.New())
+	_, err := f.service.GetUsuario(t.Context(), uuid.New())
 	if !errors.Is(err, ErrUsuarioNotFound) {
 		t.Fatalf("expected ErrUsuarioNotFound, got %v", err)
 	}
@@ -116,7 +114,7 @@ func TestGetUsuario_NotFound(t *testing.T) {
 
 func TestChangeSenha(t *testing.T) {
 	t.Parallel()
-	service := newTestService(t)
+	f := newFixture(t)
 
 	params := CreateUsuarioParams{
 		Nome:  "Fulano da Silva",
@@ -124,10 +122,7 @@ func TestChangeSenha(t *testing.T) {
 		Email: "fulano.silva@planejamento.mg.gov.br",
 		Senha: "Abc123123",
 	}
-	usuario, err := service.CreateUsuario(t.Context(), params)
-	if err != nil {
-		t.Fatal(err)
-	}
+	usuario := f.createUsuario(t, params)
 
 	// Atualiza senha do usuário
 	senhaParams := UpdateSenhaParams{
@@ -135,13 +130,13 @@ func TestChangeSenha(t *testing.T) {
 		SenhaAntiga: params.Senha,
 		SenhaNova:   "123123Abc",
 	}
-	err = service.ChangeSenha(t.Context(), senhaParams)
+	err := f.service.ChangeSenha(t.Context(), senhaParams)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Lê os dados do usuário atualizado
-	usuario, err = service.GetUsuario(t.Context(), usuario.ID)
+	usuario, err = f.service.GetUsuario(t.Context(), usuario.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -161,17 +156,14 @@ func TestChangeSenha(t *testing.T) {
 
 func TestChangeSenha_ErrNoSenha(t *testing.T) {
 	t.Parallel()
-	service := newTestService(t)
+	f := newFixture(t)
 
 	params := CreateUsuarioParams{
 		Nome:  "Fulano da Silva",
 		CPF:   "123.456.789-09",
 		Email: "fulano.silva@planejamento.mg.gov.br",
 	}
-	usuario, err := service.CreateUsuario(t.Context(), params)
-	if err != nil {
-		t.Fatal(err)
-	}
+	usuario := f.createUsuario(t, params)
 
 	// Atualiza senha do usuário
 	senhaParams := UpdateSenhaParams{
@@ -179,7 +171,7 @@ func TestChangeSenha_ErrNoSenha(t *testing.T) {
 		SenhaAntiga: params.Senha,
 		SenhaNova:   "123123Abc",
 	}
-	err = service.ChangeSenha(t.Context(), senhaParams)
+	err := f.service.ChangeSenha(t.Context(), senhaParams)
 	if !errors.Is(err, ErrNoSenha) {
 		t.Fatalf("expected ErrNoSenha, got %v", err)
 	}

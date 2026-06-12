@@ -16,6 +16,10 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const (
+	ativarContaTokenTTL = 3 * 24 * time.Hour // 72 horas
+)
+
 // Anonymous representa um usuário não autenticado.
 var Anonymous = &Usuario{}
 
@@ -145,7 +149,7 @@ func (s *Service) CreateUsuario(ctx context.Context, params CreateUsuarioParams)
 	token, err := s.createToken(ctx, q, CreateTokenParams{
 		UsuarioID: row.ID.Bytes,
 		Escopo:    EscopoAtivarConta,
-		TTL:       3 * 24 * time.Hour,
+		TTL:       ativarContaTokenTTL,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create token: %w", err)

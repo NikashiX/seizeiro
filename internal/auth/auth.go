@@ -24,8 +24,9 @@ type Service struct {
 
 func NewService(pool *pgxpool.Pool, notifier Notifier) *Service {
 	return &Service{
-		pool: pool,
-		q:    postgres.New(pool),
+		pool:     pool,
+		q:        postgres.New(pool),
+		notifier: notifier,
 	}
 }
 

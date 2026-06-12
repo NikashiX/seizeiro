@@ -10,20 +10,54 @@ import (
 	"github.com/automatiza-mg/seizeiro/internal/database"
 	"github.com/google/go-cmp/cmp"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 var ti *database.TestInstance
 
-type fakeNotifier struct{}
+// fakeNotifier implementa Notifier para testes, sem chamadas externas.
+// Registra a última notificação enviada para permitir asserções.
+type fakeNotifier struct {
+	calls        int
+	emailAddress string
+	token        string
+}
 
 func (f *fakeNotifier) SendAtivarConta(ctx context.Context, tx pgx.Tx, emailAddress string, token string) error {
+	f.calls++
+	f.emailAddress = emailAddress
+	f.token = token
 	return nil
 }
 
-func newTestService(tb testing.TB) *Service {
+type fixture struct {
+	pool     *pgxpool.Pool
+	service  *Service
+	notifier *fakeNotifier
+}
+
+func newFixture(tb testing.TB) *fixture {
 	tb.Helper()
+
 	pool := ti.NewPool(tb)
-	return NewService(pool, &fakeNotifier{})
+	notifier := &fakeNotifier{}
+
+	return &fixture{
+		pool:     pool,
+		service:  NewService(pool, notifier),
+		notifier: notifier,
+	}
+}
+
+// createUsuario cria um usuário de teste, falhando o teste em caso de erro.
+func (f *fixture) createUsuario(tb testing.TB, params CreateUsuarioParams) *Usuario {
+	tb.Helper()
+
+	usuario, err := f.service.CreateUsuario(tb.Context(), params)
+	if err != nil {
+		tb.Fatal(err)
+	}
+	return usuario
 }
 
 func TestMain(m *testing.M) {
@@ -39,19 +73,16 @@ func TestMain(m *testing.M) {
 
 func TestLogin(t *testing.T) {
 	t.Parallel()
-	service := newTestService(t)
+	f := newFixture(t)
 
-	usuario, err := service.CreateUsuario(t.Context(), CreateUsuarioParams{
+	usuario := f.createUsuario(t, CreateUsuarioParams{
 		Nome:  "Fulano da Silva",
 		CPF:   "123.456.789-09",
 		Email: "fulano.silva@planejamento.mg.gov.br",
 		Senha: "Abc123123",
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
 
-	principal, err := service.Login(t.Context(), LoginParams{
+	principal, err := f.service.Login(t.Context(), LoginParams{
 		CPF:   "123.456.789-09",
 		Senha: "Abc123123",
 	})
@@ -70,7 +101,7 @@ func TestLogin(t *testing.T) {
 	}
 
 	// O token emitido deve ser válido e pertencer ao usuário autenticado.
-	owner, err := service.GetTokenOwner(t.Context(), principal.Token.PlainText, EscopoAuth)
+	owner, err := f.service.GetTokenOwner(t.Context(), principal.Token.PlainText, EscopoAuth)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,9 +112,9 @@ func TestLogin(t *testing.T) {
 
 func TestLogin_InvalidCPF(t *testing.T) {
 	t.Parallel()
-	service := newTestService(t)
+	f := newFixture(t)
 
-	_, err := service.Login(t.Context(), LoginParams{
+	_, err := f.service.Login(t.Context(), LoginParams{
 		CPF:   "000.000.000-00",
 		Senha: "Abc123123",
 	})
@@ -94,10 +125,10 @@ func TestLogin_InvalidCPF(t *testing.T) {
 
 func TestLogin_InvalidCredentials_UnknownCPF(t *testing.T) {
 	t.Parallel()
-	service := newTestService(t)
+	f := newFixture(t)
 
 	// CPF válido, porém não cadastrado.
-	_, err := service.Login(t.Context(), LoginParams{
+	_, err := f.service.Login(t.Context(), LoginParams{
 		CPF:   "529.988.310-28",
 		Senha: "Abc123123",
 	})
@@ -108,19 +139,16 @@ func TestLogin_InvalidCredentials_UnknownCPF(t *testing.T) {
 
 func TestLogin_InvalidCredentials_WrongPassword(t *testing.T) {
 	t.Parallel()
-	service := newTestService(t)
+	f := newFixture(t)
 
-	_, err := service.CreateUsuario(t.Context(), CreateUsuarioParams{
+	f.createUsuario(t, CreateUsuarioParams{
 		Nome:  "Fulano da Silva",
 		CPF:   "123.456.789-09",
 		Email: "fulano.silva@planejamento.mg.gov.br",
 		Senha: "Abc123123",
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
 
-	_, err = service.Login(t.Context(), LoginParams{
+	_, err := f.service.Login(t.Context(), LoginParams{
 		CPF:   "123.456.789-09",
 		Senha: "SenhaErrada123",
 	})
@@ -131,19 +159,16 @@ func TestLogin_InvalidCredentials_WrongPassword(t *testing.T) {
 
 func TestLogin_ErrNoSenha(t *testing.T) {
 	t.Parallel()
-	service := newTestService(t)
+	f := newFixture(t)
 
 	// Usuário criado sem senha cadastrada.
-	_, err := service.CreateUsuario(t.Context(), CreateUsuarioParams{
+	f.createUsuario(t, CreateUsuarioParams{
 		Nome:  "Fulano da Silva",
 		CPF:   "123.456.789-09",
 		Email: "fulano.silva@planejamento.mg.gov.br",
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
 
-	_, err = service.Login(t.Context(), LoginParams{
+	_, err := f.service.Login(t.Context(), LoginParams{
 		CPF:   "123.456.789-09",
 		Senha: "Abc123123",
 	})

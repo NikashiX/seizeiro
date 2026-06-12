@@ -47,6 +47,10 @@ type CreateTokenParams struct {
 }
 
 // CreateToken cria um novo token com escopo e duração para um determinado usuário.
+func (s *Service) CreateToken(ctx context.Context, params CreateTokenParams) (*Token, error) {
+	return s.createToken(ctx, s.q, params)
+}
+
 func (s *Service) createToken(ctx context.Context, q *postgres.Queries, params CreateTokenParams) (*Token, error) {
 	if params.TTL <= 0 {
 		return nil, fmt.Errorf("invalid token ttl: %s", params.TTL)
@@ -71,11 +75,6 @@ func (s *Service) createToken(ctx context.Context, q *postgres.Queries, params C
 		PlainText: plainText,
 		ExpiraEm:  expiraEm,
 	}, nil
-}
-
-// CreateToken cria um novo token com escopo e duração para um determinado usuário.
-func (s *Service) CreateToken(ctx context.Context, params CreateTokenParams) (*Token, error) {
-	return s.createToken(ctx, s.q, params)
 }
 
 // GetTokenOwner retorna o dono de um determinado token.

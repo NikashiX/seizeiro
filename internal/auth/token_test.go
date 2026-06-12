@@ -11,19 +11,15 @@ import (
 
 func TestGetTokenOwner(t *testing.T) {
 	t.Parallel()
+	f := newFixture(t)
 
-	service := newTestService(t)
-
-	usuario, err := service.CreateUsuario(t.Context(), CreateUsuarioParams{
+	usuario := f.createUsuario(t, CreateUsuarioParams{
 		Nome:  "Fulano da Silva",
 		CPF:   "123.456.789-09",
 		Email: "fulano.silva@planejamento.mg.gov.br",
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
 
-	token, err := service.CreateToken(t.Context(), CreateTokenParams{
+	token, err := f.service.CreateToken(t.Context(), CreateTokenParams{
 		UsuarioID: usuario.ID,
 		Escopo:    EscopoAuth,
 		TTL:       time.Hour,
@@ -32,7 +28,7 @@ func TestGetTokenOwner(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	read, err := service.GetTokenOwner(t.Context(), token.PlainText, EscopoAuth)
+	read, err := f.service.GetTokenOwner(t.Context(), token.PlainText, EscopoAuth)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,19 +39,16 @@ func TestGetTokenOwner(t *testing.T) {
 
 func TestGetTokenOwner_Expired(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		service := newTestService(t)
+		f := newFixture(t)
 
-		usuario, err := service.CreateUsuario(t.Context(), CreateUsuarioParams{
+		usuario := f.createUsuario(t, CreateUsuarioParams{
 			Nome:  "Fulano da Silva",
 			CPF:   "123.456.789-09",
 			Email: "fulano.silva@planejamento.mg.gov.br",
 		})
-		if err != nil {
-			t.Fatal(err)
-		}
 
 		ttl := time.Hour
-		token, err := service.CreateToken(t.Context(), CreateTokenParams{
+		token, err := f.service.CreateToken(t.Context(), CreateTokenParams{
 			UsuarioID: usuario.ID,
 			Escopo:    EscopoAuth,
 			TTL:       ttl,
@@ -67,7 +60,7 @@ func TestGetTokenOwner_Expired(t *testing.T) {
 		// Tempo em que o token já vai estar expirado.
 		time.Sleep(ttl + 5*time.Second)
 
-		_, err = service.GetTokenOwner(t.Context(), token.PlainText, EscopoAuth)
+		_, err = f.service.GetTokenOwner(t.Context(), token.PlainText, EscopoAuth)
 		if !errors.Is(err, ErrInvalidToken) {
 			t.Fatalf("expected ErrInvalidToken, got %v", err)
 		}
