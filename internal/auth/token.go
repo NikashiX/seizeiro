@@ -24,6 +24,8 @@ const (
 	EscopoAuth Escopo = "auth"
 	// EscopoResetSenha é o escopo usado para tokens de redefinição de senha.
 	EscopoResetSenha Escopo = "reset-senha"
+	// EscopoResetSenha é o escopo usado concluir o cadastro de um usuário.
+	EscopoAtivarConta Escopo = "ativar-conta"
 )
 
 // Escopo define o uso de um [Token].
@@ -45,7 +47,7 @@ type CreateTokenParams struct {
 }
 
 // CreateToken cria um novo token com escopo e duração para um determinado usuário.
-func (s *Service) CreateToken(ctx context.Context, params CreateTokenParams) (*Token, error) {
+func (s *Service) createToken(ctx context.Context, q *postgres.Queries, params CreateTokenParams) (*Token, error) {
 	if params.TTL <= 0 {
 		return nil, fmt.Errorf("invalid token ttl: %s", params.TTL)
 	}
@@ -55,7 +57,7 @@ func (s *Service) CreateToken(ctx context.Context, params CreateTokenParams) (*T
 	hash := sha256.Sum256([]byte(plainText))
 	expiraEm := time.Now().Add(params.TTL)
 
-	err := s.q.SaveToken(ctx, postgres.SaveTokenParams{
+	err := q.SaveToken(ctx, postgres.SaveTokenParams{
 		Hash:      hash[:],
 		UsuarioID: pgtype.UUID{Bytes: params.UsuarioID, Valid: true},
 		Escopo:    string(params.Escopo),
@@ -69,6 +71,11 @@ func (s *Service) CreateToken(ctx context.Context, params CreateTokenParams) (*T
 		PlainText: plainText,
 		ExpiraEm:  expiraEm,
 	}, nil
+}
+
+// CreateToken cria um novo token com escopo e duração para um determinado usuário.
+func (s *Service) CreateToken(ctx context.Context, params CreateTokenParams) (*Token, error) {
+	return s.createToken(ctx, s.q, params)
 }
 
 // GetTokenOwner retorna o dono de um determinado token.

@@ -12,12 +12,17 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-type Service struct {
-	pool *pgxpool.Pool
-	q    *postgres.Queries
+type Notifier interface {
+	SendAtivarConta(ctx context.Context, tx pgx.Tx, emailAddress string, token string) error
 }
 
-func NewService(pool *pgxpool.Pool) *Service {
+type Service struct {
+	pool     *pgxpool.Pool
+	q        *postgres.Queries
+	notifier Notifier
+}
+
+func NewService(pool *pgxpool.Pool, notifier Notifier) *Service {
 	return &Service{
 		pool: pool,
 		q:    postgres.New(pool),

@@ -9,14 +9,21 @@ import (
 
 	"github.com/automatiza-mg/seizeiro/internal/database"
 	"github.com/google/go-cmp/cmp"
+	"github.com/jackc/pgx/v5"
 )
 
 var ti *database.TestInstance
 
+type fakeNotifier struct{}
+
+func (f *fakeNotifier) SendAtivarConta(ctx context.Context, tx pgx.Tx, emailAddress string, token string) error {
+	return nil
+}
+
 func newTestService(tb testing.TB) *Service {
 	tb.Helper()
 	pool := ti.NewPool(tb)
-	return NewService(pool)
+	return NewService(pool, &fakeNotifier{})
 }
 
 func TestMain(m *testing.M) {

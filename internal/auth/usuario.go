@@ -117,7 +117,15 @@ func (s *Service) CreateUsuario(ctx context.Context, params CreateUsuarioParams)
 		}
 	}
 
-	row, err := s.q.SaveUsuario(ctx, postgres.SaveUsuarioParams{
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	q := s.q.WithTx(tx)
+
+	row, err := q.SaveUsuario(ctx, postgres.SaveUsuarioParams{
 		Nome:      nome,
 		CPF:       cpf,
 		Email:     email,
@@ -132,6 +140,24 @@ func (s *Service) CreateUsuario(ctx context.Context, params CreateUsuarioParams)
 		default:
 			return nil, fmt.Errorf("save usuario: %w", err)
 		}
+	}
+
+	token, err := s.createToken(ctx, q, CreateTokenParams{
+		UsuarioID: row.ID.Bytes,
+		Escopo:    EscopoAtivarConta,
+		TTL:       3 * 24 * time.Hour,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create token: %w", err)
+	}
+
+	err = s.notifier.SendAtivarConta(ctx, tx, row.Email, token.PlainText)
+	if err != nil {
+		return nil, fmt.Errorf("send ativar conta: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit tx: %w", err)
 	}
 
 	usuario := usuarioFromDB(row)

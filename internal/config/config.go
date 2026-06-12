@@ -8,7 +8,7 @@ type DocumentIntelligence struct {
 	Endpoint string `env:"AZURE_DOCINTEL_ENDPOINT"`
 }
 
-// Storage contém as configurações de armazenamento de objetos (pacote blob).
+// Storage contém as configurações de armazenamento de objetos.
 //
 // Quando AzureAccount está definido, usa o Azure Blob Storage; caso contrário,
 // usa o sistema de arquivos no diretório FilesystemRoot.
@@ -29,12 +29,25 @@ type OpenAI struct {
 	EmbeddingBatchSize int `env:"OPENAI_EMBEDDING_BATCH_SIZE" envDefault:"256"`
 }
 
+// SMTP contém as configurações do servidor de e-mail.
+type SMTP struct {
+	Host        string `env:"SMTP_HOST" envDefault:"localhost"`
+	Port        int    `env:"SMTP_PORT" envDefault:"1025"`
+	User        string `env:"SMTP_USER"`
+	Password    string `env:"SMTP_PASSWORD"`
+	FromAddress string `env:"SMTP_FROM_ADDRESS" envDefault:"notificacoes@planejamento.mg.gov.br"`
+}
+
 // Config contém as configurações da aplicação.
 type Config struct {
+	// ClientURL é a URL base do frontend da aplicação.
+	ClientURL string `env:"CLIENT_URL,notEmpty" envDefault:"http://localhost:5173"`
+	// PostgresURL é a URL de conexão com o banco de dados PostgreSQL.
 	PostgresURL string `env:"POSTGRES_URL,notEmpty"`
 
 	DocIntel DocumentIntelligence
 	OpenAI   OpenAI
+	SMTP     SMTP
 	Storage  Storage
 }
 

@@ -15,6 +15,7 @@ import (
 	"github.com/automatiza-mg/seizeiro/internal/database"
 	"github.com/automatiza-mg/seizeiro/internal/docintel"
 	"github.com/automatiza-mg/seizeiro/internal/llm"
+	"github.com/automatiza-mg/seizeiro/internal/mailer"
 	"github.com/automatiza-mg/seizeiro/internal/postgres/migrations"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
@@ -72,6 +73,17 @@ func run() error {
 
 	ocr := docintel.NewClient(cfg.DocIntel.Endpoint, cfg.DocIntel.Key)
 
+	smtpMailer, err := mailer.NewSMTPMailer(mailer.SMTPConfig{
+		User:        cfg.SMTP.User,
+		Password:    cfg.SMTP.Password,
+		Host:        cfg.SMTP.Host,
+		Port:        cfg.SMTP.Port,
+		FromAddress: cfg.SMTP.FromAddress,
+	})
+	if err != nil {
+		return fmt.Errorf("smtp mailer: %w", err)
+	}
+
 	workers := river.NewWorkers()
 	riverClient, err := river.NewClient(riverpgxv5.New(pool), &river.Config{
 		Queues: map[string]river.QueueConfig{
@@ -88,6 +100,7 @@ func run() error {
 
 	river.AddWorker(workers, conteudo.NewExtractConteudoWorker(conteudoService))
 	river.AddWorker(workers, conteudo.NewChunkConteudoWorker(conteudoService))
+	river.AddWorker(workers, mailer.NewWorker(smtpMailer))
 
 	if err := riverClient.Start(ctx); err != nil {
 		return fmt.Errorf("river start: %w", err)
