@@ -23,10 +23,15 @@ type FilesystemStorage struct {
 // NewFilesystemStorage cria um [FilesystemStorage] que armazena os objetos sob o
 // diretório root, que deve existir.
 func NewFilesystemStorage(root string) (*FilesystemStorage, error) {
+	if err := os.MkdirAll(root, 0755); err != nil {
+		return nil, err
+	}
+
 	r, err := os.OpenRoot(root)
 	if err != nil {
 		return nil, fmt.Errorf("open root: %w", err)
 	}
+
 	return &FilesystemStorage{root: r}, nil
 }
 
@@ -58,14 +63,10 @@ func (s *FilesystemStorage) Put(ctx context.Context, key, contentType string, r 
 	if err != nil {
 		return fmt.Errorf("create: %w", err)
 	}
+	defer f.Close()
 
 	if _, err := io.Copy(f, r); err != nil {
-		// Junta o erro de cópia com o de fechamento para não perder nenhum dos dois.
-		return errors.Join(fmt.Errorf("copy: %w", err), f.Close())
-	}
-
-	if err := f.Close(); err != nil {
-		return fmt.Errorf("close: %w", err)
+		return fmt.Errorf("copy: %w", err)
 	}
 
 	return nil
@@ -78,6 +79,5 @@ func (s *FilesystemStorage) Delete(ctx context.Context, key string) error {
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("remove: %w", err)
 	}
-
 	return nil
 }

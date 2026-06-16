@@ -9,6 +9,8 @@ Sistema de análise e triagem automática de processos SEI usando IA.
 3. [Docker](https://www.docker.com)
 4. [goose](https://pressly.github.io/goose/)
 5. [sqlc](https://sqlc.dev/)
+6. [air](https://github.com/air-verse/air) - live reload durante o
+   desenvolvimento, configurado em [`.air.toml`](.air.toml)
 
 ## Configuração
 
@@ -18,6 +20,21 @@ raiz do projeto:
 
 ```bash
 cp .env.example .env
+```
+
+## Infraestrutura de desenvolvimento
+
+A infraestrutura local de desenvolvimento é definida no arquivo
+[`compose.yml`](compose.yml). Para iniciar os serviços:
+
+```bash
+docker compose up -d
+```
+
+Para encerrá-los:
+
+```bash
+docker compose down
 ```
 
 ## Contribuindo
