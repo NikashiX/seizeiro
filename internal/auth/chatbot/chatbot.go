@@ -103,6 +103,7 @@ type CreateUsuarioParams struct {
 	Token      string
 	SEIUsuario string
 	SEISenha   string
+	SEIOrgao   int
 }
 
 // CreateUsuario registra as credenciais SEI de um usuário do chatbot a partir de um token criado por

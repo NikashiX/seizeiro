@@ -8,10 +8,12 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/automatiza-mg/seizeiro/internal/auth"
 	chatbotauth "github.com/automatiza-mg/seizeiro/internal/auth/chatbot"
+	"github.com/automatiza-mg/seizeiro/internal/sei/wssei"
 	"github.com/danielgtaylor/huma/v2"
 )
 
@@ -55,7 +57,7 @@ func registerCreateChatbotCadastro(api huma.API, pathPrefix string, baseURL stri
 
 func (app *application) handleCadastro(w http.ResponseWriter, r *http.Request) {
 	token := r.URL.Query().Get("token")
-	tokenData, err := app.chatbotauth.GetTokenData(r.Context(), token)
+	_, err := app.chatbotauth.GetTokenData(r.Context(), token)
 	if err != nil {
 		switch {
 		case errors.Is(err, auth.ErrInvalidToken):
@@ -73,8 +75,17 @@ func (app *application) handleCadastro(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	orgaos, err := app.scraper.ListOrgaos(r.Context())
+	if err != nil {
+		log.Printf("Server Error: %v", err)
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+
 	buf := new(bytes.Buffer)
-	err = tmpl.Execute(buf, tokenData)
+	err = tmpl.Execute(buf, map[string]any{
+		"Orgaos": orgaos,
+	})
 	if err != nil {
 		log.Printf("Server Error: %v", err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
@@ -104,8 +115,17 @@ func (app *application) handleCadastroPost(w http.ResponseWriter, r *http.Reques
 
 	usuario := r.FormValue("sei_usuario")
 	senha := r.FormValue("sei_senha")
+	orgaoStr := r.FormValue("sei_orgao")
+	orgao, err := strconv.Atoi(orgaoStr)
 
-	if usuario == "" || senha == "" {
+	if usuario == "" || senha == "" || err != nil {
+		http.Redirect(w, r, r.Referer(), http.StatusOK)
+		return
+	}
+
+	_, err = wssei.NewAuth(app.cfg.SEI.BaseURL).Autenticar(r.Context(), usuario, senha, orgao)
+	if err != nil {
+		log.Printf("Failed to authenticate: %v", err)
 		http.Redirect(w, r, r.Referer(), http.StatusOK)
 		return
 	}
@@ -114,6 +134,7 @@ func (app *application) handleCadastroPost(w http.ResponseWriter, r *http.Reques
 		Token:      token,
 		SEIUsuario: usuario,
 		SEISenha:   senha,
+		SEIOrgao:   orgao,
 	})
 	if err != nil {
 		log.Printf("Server Error: %v", err)

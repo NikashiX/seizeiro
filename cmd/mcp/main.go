@@ -13,6 +13,7 @@ import (
 	chatbotauth "github.com/automatiza-mg/seizeiro/internal/auth/chatbot"
 	"github.com/automatiza-mg/seizeiro/internal/config"
 	"github.com/automatiza-mg/seizeiro/internal/database"
+	"github.com/automatiza-mg/seizeiro/internal/sei"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
 )
@@ -29,6 +30,7 @@ type application struct {
 	pool        *pgxpool.Pool
 	views       fs.FS
 	chatbotauth *chatbotauth.Service
+	scraper     *sei.Scraper
 }
 
 func run() error {
@@ -61,6 +63,7 @@ func run() error {
 		pool:        pool,
 		views:       os.DirFS("web/views"),
 		chatbotauth: chatAuth,
+		scraper:     sei.NewScraper(cfg.SEI.BaseURL),
 	}
 
 	srv := &http.Server{

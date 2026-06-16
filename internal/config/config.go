@@ -43,6 +43,11 @@ type SMTP struct {
 	FromAddress string `env:"SMTP_FROM_ADDRESS" envDefault:"notificacoes@planejamento.mg.gov.br"`
 }
 
+// SEI contém as configurações de acesso às APIs do SEI.
+type SEI struct {
+	BaseURL string `env:"SEI_BASE_URL,notEmpty"`
+}
+
 // Config contém as configurações da aplicação.
 type Config struct {
 	// BaseURL é a URL base do servidor.
@@ -61,6 +66,7 @@ type Config struct {
 	OpenAI   OpenAI
 	SMTP     SMTP
 	Storage  Storage
+	SEI      SEI
 }
 
 // NewFromEnv cria uma nova [Config] com base nas variáveis de ambiente definidas no sistema operacional.
