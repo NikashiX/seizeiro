@@ -167,6 +167,8 @@ type ListarProcessosParams struct {
 	Tipo TipoBusca
 	// ApenasMeus, quando verdadeiro, retorna apenas os processos do usuário.
 	ApenasMeus bool
+	// Unidade é o id da unidade.
+	Unidade int
 }
 
 // Converte os parâmetros em [url.Values], omitindo os campos zerados.
@@ -192,6 +194,9 @@ func (p ListarProcessosParams) values() url.Values {
 	}
 	if p.ApenasMeus {
 		q.Set("apenasMeus", "S")
+	}
+	if p.Unidade != 0 {
+		q.Set("unidade", strconv.Itoa(p.Unidade))
 	}
 	return q
 }
@@ -240,4 +245,42 @@ func (c *Client) ListarProcessos(ctx context.Context, params ListarProcessosPara
 	}
 
 	return env.Data, total, nil
+}
+
+// ConsultarProcessos retorna os dados detalhados de um único processo
+// com base no número do protocolo informado.
+func (c *Client) ConsultarProcessos(ctx context.Context, protocolo int) (*Processo, error) {
+	endpoint := c.endpoint + "/processo/" + strconv.Itoa(protocolo)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("new request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+
+	res, err := c.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("http do: %w", err)
+	}
+	defer res.Body.Close()
+
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read body: %w", err)
+	}
+
+	if res.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status %d: %s", res.StatusCode, strings.TrimSpace(string(body)))
+	}
+
+	var env Envelope[Processo]
+	if err := json.Unmarshal(body, &env); err != nil {
+		return nil, fmt.Errorf("json unmarshal: %w", err)
+	}
+
+	if !env.Sucesso {
+		return nil, fmt.Errorf("invalid response: %s", env.Mensagem)
+	}
+
+	return &env.Data, nil
 }
