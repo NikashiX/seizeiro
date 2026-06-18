@@ -5,6 +5,7 @@ package wssei
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 )
 
@@ -24,6 +25,14 @@ type Envelope[T any] struct {
 	Mensagem string `json:"mensagem"`
 	Total    string `json:"total"`
 	Data     T      `json:"data"`
+}
+
+// Se total vazio, return 0  e sem erro
+func (e *Envelope[T]) getTotal() (int, error) {
+	if e.Total == "" {
+		return 0, nil
+	}
+	return strconv.Atoi(e.Total)
 }
 
 // Config reúne os dados necessários para autenticar e acessar o WSSEI.
