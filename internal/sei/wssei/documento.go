@@ -209,9 +209,6 @@ func (c *Client) ConsultarDocumentoExterno(ctx context.Context, protocolo int) (
 	defer resp.Body.Close()
 
 	var result Envelope[DocumentoExterno]
-	if err != nil {
-		return nil, err
-	}
 
 	err = json.NewDecoder(resp.Body).Decode(&result)
 	if err != nil {
@@ -296,9 +293,6 @@ func (c *Client) ListarDocumentosProcessos(ctx context.Context, params ListarDoc
 	defer resp.Body.Close()
 
 	var result Envelope[[]Documento]
-	if err != nil {
-		return nil, 0, err
-	}
 
 	err = json.NewDecoder(resp.Body).Decode(&result)
 	if err != nil {
