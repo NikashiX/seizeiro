@@ -13,7 +13,7 @@ import (
 
 // Processo representa um processo retornado pelo WSSEI.
 type Processo struct {
-	Id                 string            `json:"id"`
+	ID                 string            `json:"id"`
 	Status             string            `json:"status"`
 	SeiNumMaxDocsPasta string            `json:"seiNumMaxDocsPasta"`
 	Atributos          ProcessoAtributos `json:"atributos"`
@@ -21,8 +21,8 @@ type Processo struct {
 
 // ProcessoAtributos reúne os atributos detalhados de um [Processo].
 type ProcessoAtributos struct {
-	IdProcedimento   string                           `json:"idProcedimento"`
-	IdProtocolo      string                           `json:"idProtocolo"`
+	IDProcedimento   string                           `json:"idProcedimento"`
+	IDProtocolo      string                           `json:"idProtocolo"`
 	Numero           string                           `json:"numero"`
 	TipoProcesso     string                           `json:"tipoProcesso"`
 	Descricao        string                           `json:"descricao"`
@@ -37,8 +37,8 @@ type ProcessoAtributos struct {
 
 // ProcessoUsuarioAtribuido representa o usuário atribuído a um [Processo].
 type ProcessoUsuarioAtribuido struct {
-	IdAtividade   string `json:"idAtividade"`
-	IdUsuario     string `json:"idUsuario"`
+	IDAtividade   string `json:"idAtividade"`
+	IDUsuario     string `json:"idUsuario"`
 	Sigla         string `json:"sigla"`
 	Nome          string `json:"nome"`
 	Nomeformatado string `json:"nomeformatado"`
@@ -46,19 +46,19 @@ type ProcessoUsuarioAtribuido struct {
 
 // ProcessoUnidade representa a unidade atual de um [Processo].
 type ProcessoUnidade struct {
-	IdUnidade string `json:"idUnidade"`
+	IDUnidade string `json:"idUnidade"`
 	Sigla     string `json:"sigla"`
 }
 
 // ProcessoCiencia representa um registro de ciência em um [Processo].
 type ProcessoCiencia struct {
-	IdProtocolo  string `json:"idProtocolo"`
-	IdAtividade  string `json:"idAtividade"`
+	IDProtocolo  string `json:"idProtocolo"`
+	IDAtividade  string `json:"idAtividade"`
 	Data         string `json:"data"`
-	IdUnidade    string `json:"idUnidade"`
+	IDUnidade    string `json:"idUnidade"`
 	Unidade      string `json:"unidade"`
 	SiglaUnidade string `json:"siglaUnidade"`
-	IdUsuario    string `json:"idUsuario"`
+	IDUsuario    string `json:"idUsuario"`
 	SiglaUsuario string `json:"siglaUsuario"`
 	NomeUsuario  string `json:"nomeUsuario"`
 	Descricao    string `json:"descricao"`
@@ -66,10 +66,10 @@ type ProcessoCiencia struct {
 
 // ProcessoMarcador representa o marcador aplicado a um [Processo].
 type ProcessoMarcador struct {
-	IdMarcador   string `json:"idMarcador"`
+	IDMarcador   string `json:"idMarcador"`
 	Nome         string `json:"nome"`
 	Texto        string `json:"texto"`
-	IdCor        string `json:"idCor"`
+	IDCor        string `json:"idCor"`
 	DescricaoCor string `json:"descricaoCor"`
 	ArquivoCor   string `json:"arquivoCor"`
 }
@@ -83,7 +83,7 @@ type ProcessoDadosAbertura struct {
 
 // ProcessoDadosAberturaUnidade representa uma unidade nos dados de abertura de um [Processo].
 type ProcessoDadosAberturaUnidade struct {
-	Id   string `json:"id"`
+	ID   string `json:"id"`
 	Nome string `json:"nome"`
 }
 
@@ -94,11 +94,11 @@ type ProcessoDadosAberturaListaItem struct {
 
 // ProcessoAnotacao representa uma anotação de um [Processo].
 type ProcessoAnotacao struct {
-	IdAnotacao    string `json:"idAnotacao"`
-	IdProtocolo   string `json:"idProtocolo"`
+	IDAnotacao    string `json:"idAnotacao"`
+	IDProtocolo   string `json:"idProtocolo"`
 	Descricao     string `json:"descricao"`
-	IdUnidade     string `json:"idUnidade"`
-	IdUsuario     string `json:"idUsuario"`
+	IDUnidade     string `json:"idUnidade"`
+	IDUsuario     string `json:"idUsuario"`
 	DthAnotacao   string `json:"dthAnotacao"`
 	SinPrioridade string `json:"sinPrioridade"`
 	StaAnotacao   string `json:"staAnotacao"`
