@@ -14,6 +14,7 @@ import (
 	"github.com/automatiza-mg/seizeiro/internal/auth"
 	chatbotauth "github.com/automatiza-mg/seizeiro/internal/auth/chatbot"
 	"github.com/automatiza-mg/seizeiro/internal/sei/wssei"
+	"github.com/automatiza-mg/seizeiro/internal/webhook"
 	"github.com/danielgtaylor/huma/v2"
 )
 
@@ -97,7 +98,7 @@ func (app *application) handleCadastro(w http.ResponseWriter, r *http.Request) {
 
 func (app *application) handleCadastroPost(w http.ResponseWriter, r *http.Request) {
 	token := r.URL.Query().Get("token")
-	_, err := app.chatbotauth.GetTokenData(r.Context(), token)
+	tokenData, err := app.chatbotauth.GetTokenData(r.Context(), token)
 	if err != nil {
 		switch {
 		case errors.Is(err, auth.ErrInvalidToken):
@@ -141,6 +142,15 @@ func (app *application) handleCadastroPost(w http.ResponseWriter, r *http.Reques
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
+
+	// Notifica o receptor externo (n8n / whatsapp-sim). O envio é best-effort
+	// e não bloqueia a resposta ao usuário; falhas são apenas logadas pelo
+	// notifier.
+	app.chatbotWebhook.NotifyCadastro(r.Context(), webhook.CadastroEvent{
+		Plataforma:   tokenData.Plataforma,
+		PlataformaID: tokenData.PlataformaID,
+		SEIUsuario:   usuario,
+	})
 
 	http.Redirect(w, r, "/cadastro/sucesso", http.StatusSeeOther)
 }

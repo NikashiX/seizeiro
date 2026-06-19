@@ -48,6 +48,17 @@ type SEI struct {
 	BaseURL string `env:"SEI_BASE_URL,notEmpty"`
 }
 
+// ChatbotWebhook contém as configurações do webhook notificado quando o
+// cadastro de um usuário do chatbot é concluído com sucesso.
+//
+// Quando URL está vazia, nenhuma notificação é disparada. Secret, quando
+// definido, é enviado no header X-Webhook-Secret para o receptor validar
+// a origem da chamada.
+type ChatbotWebhook struct {
+	URL    string `env:"CHATBOT_WEBHOOK_URL"`
+	Secret string `env:"CHATBOT_WEBHOOK_SECRET"`
+}
+
 // Config contém as configurações da aplicação.
 type Config struct {
 	// BaseURL é a URL base do servidor.
@@ -63,11 +74,12 @@ type Config struct {
 	SecretKey string `env:"SECRET_KEY,notEmpty"`
 
 	Production bool `env:"PRODUCTION" envDefault:"true"`
-	DocIntel DocumentIntelligence
-	OpenAI   OpenAI
-	SMTP     SMTP
-	Storage  Storage
-	SEI      SEI
+	DocIntel       DocumentIntelligence
+	OpenAI         OpenAI
+	SMTP           SMTP
+	Storage        Storage
+	SEI            SEI
+	ChatbotWebhook ChatbotWebhook
 }
 
 // NewFromEnv cria uma nova [Config] com base nas variáveis de ambiente definidas no sistema operacional.

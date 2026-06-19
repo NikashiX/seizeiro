@@ -22,6 +22,7 @@ import (
 	"github.com/automatiza-mg/seizeiro/internal/mailer"
 	"github.com/automatiza-mg/seizeiro/internal/postgres/migrations"
 	"github.com/automatiza-mg/seizeiro/internal/sei"
+	"github.com/automatiza-mg/seizeiro/internal/webhook"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/joho/godotenv"
@@ -37,11 +38,12 @@ func main() {
 }
 
 type application struct {
-	cfg         *config.Config
-	pool        *pgxpool.Pool
-	views       fs.FS
-	chatbotauth *chatbotauth.Service
-	scraper     *sei.Scraper
+	cfg            *config.Config
+	pool           *pgxpool.Pool
+	views          fs.FS
+	chatbotauth    *chatbotauth.Service
+	scraper        *sei.Scraper
+	chatbotWebhook *webhook.Notifier
 }
 
 func run() error {
@@ -139,11 +141,12 @@ func run() error {
 	}
 
 	app := &application{
-		cfg:         cfg,
-		pool:        pool,
-		views:       os.DirFS("web/views"),
-		chatbotauth: chatAuth,
-		scraper:     sei.NewScraper(cfg.SEI.BaseURL),
+		cfg:            cfg,
+		pool:           pool,
+		views:          os.DirFS("web/views"),
+		chatbotauth:    chatAuth,
+		scraper:        sei.NewScraper(cfg.SEI.BaseURL),
+		chatbotWebhook: webhook.NewNotifier(cfg.ChatbotWebhook.URL, cfg.ChatbotWebhook.Secret),
 	}
 
 	srv := &http.Server{

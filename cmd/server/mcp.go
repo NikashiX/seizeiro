@@ -29,6 +29,7 @@ func (app *application) newMCPServer() *mcp.Server {
 	}, app.toolVerificarCadastro)
 
 	registerDocumentosTools(server, app)
+	registerProcessosTools(server, app)
 
 	return server
 }
