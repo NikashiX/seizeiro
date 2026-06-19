@@ -18,9 +18,9 @@ import (
 // Header enviado pelo notifier quando há segredo configurado. O receptor deve
 // comparar o valor com o segredo compartilhado antes de processar o payload.
 //
-// Usamos `Authorization` (sem o esquema `Bearer`) para casar com o contrato
-// do whatsapp-sim em dev, que valida `Authorization == segredo`.
-const SecretHeader = "Authorization"
+// O nome `key` é o esperado pelo credential type "Header Auth" do n8n na
+// configuração de produção e é replicado pelo whatsapp-sim em dev.
+const SecretHeader = "key"
 
 // requestTimeout limita o tempo de cada chamada HTTP. Webhooks devem ser
 // rápidos; quem precisa de processamento demorado deve responder logo e

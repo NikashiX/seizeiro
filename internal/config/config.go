@@ -52,8 +52,8 @@ type SEI struct {
 // cadastro de um usuário do chatbot é concluído com sucesso.
 //
 // Quando URL está vazia, nenhuma notificação é disparada. Secret, quando
-// definido, é enviado no header Authorization para o receptor validar
-// a origem da chamada.
+// definido, é enviado no header `key` para o receptor validar a origem da
+// chamada (formato esperado pelo credential "Header Auth" do n8n).
 type ChatbotWebhook struct {
 	URL    string `env:"CHATBOT_WEBHOOK_URL"`
 	Secret string `env:"CHATBOT_WEBHOOK_SECRET"`
