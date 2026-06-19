@@ -247,9 +247,13 @@ func (c *Client) ListarProcessos(ctx context.Context, params ListarProcessosPara
 	return env.Data, total, nil
 }
 
-// ConsultarProcessos retorna os dados detalhados de um único processo
+// ConsultarProcesso retorna os dados detalhados de um único processo
 // com base no número do protocolo informado.
-func (c *Client) ConsultarProcessos(ctx context.Context, protocolo int) (*Processo, error) {
+func (c *Client) ConsultarProcesso(ctx context.Context, protocolo int) (*Processo, error) {
+	if protocolo <= 0 {
+		return nil, fmt.Errorf("protocolo inválido: %d", protocolo)
+	}
+
 	endpoint := c.endpoint + "/processo/" + strconv.Itoa(protocolo)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
