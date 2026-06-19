@@ -62,10 +62,7 @@ type Config struct {
 	// TODO: Adicionar um gerenciador de chaves com suporte para Azure Key Vault.
 	SecretKey string `env:"SECRET_KEY,notEmpty"`
 
-	DocIntel DocumentIntelligence
-	OpenAI   OpenAI
-	SMTP     SMTP
-	Storage  Storage
+	Production bool `env:"PRODUCTION" envDefault:"true"`
 	SEI      SEI
 }
 

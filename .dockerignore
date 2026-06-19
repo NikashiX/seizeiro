@@ -1,0 +1,31 @@
+# Controle de versão e metadados de IDE.
+.git
+.gitignore
+.gitattributes
+.github
+.idea
+.vscode
+.cursor
+.DS_Store
+
+# Saídas de build e artefatos locais.
+bin
+tmp
+.blob
+*.exe
+
+# Segredos e overrides locais.
+.env
+.env.*
+!.env.example
+
+# Documentação não usada em runtime.
+README.md
+CONTRIBUTING.md
+AGENTS.md
+
+# Configuração de dev local que não vale dentro do container.
+.air.toml
+compose.yml
+Dockerfile
+.dockerignore

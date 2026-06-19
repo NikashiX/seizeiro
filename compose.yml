@@ -7,9 +7,48 @@ services:
       POSTGRES_USER: admin
       POSTGRES_PASSWORD: adminpw
       POSTGRES_DB: seizeiro
+    volumes:
+      - pgv-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d seizeiro"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
 
   mailpit:
     image: axllent/mailpit
     ports:
       - "8025:8025"
       - "1025:1025"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8025/readyz"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  server:
+    build:
+      context: .
+      target: runtime
+    ports:
+      - "4000:4000"
+    env_file:
+      - .env
+    environment:
+      # Overrides para apontar aos serviços do compose em vez de localhost.
+      POSTGRES_URL: postgres://admin:adminpw@pgv:5432/seizeiro?sslmode=disable
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      STORAGE_FILESYSTEM_ROOT: /app/.blob
+    volumes:
+      - blob-data:/app/.blob
+    depends_on:
+      pgv:
+        condition: service_healthy
+      mailpit:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgv-data:
+  blob-data:

@@ -59,6 +59,15 @@ func run() error {
 	}
 	defer pool.Close()
 
+	// Em produção, aplica as migrações do schema da aplicação antes de subir
+	// o resto do servidor. Em dev, esperamos que o desenvolvedor rode goose
+	// manualmente (conforme CONTRIBUTING.md).
+	if cfg.Production {
+		if err := migrationsUp(ctx, pool); err != nil {
+			return fmt.Errorf("migrations up: %w", err)
+		}
+	}
+
 	if err := riverUp(ctx, pool); err != nil {
 		return fmt.Errorf("river up: %w", err)
 	}
@@ -182,4 +191,12 @@ func riverUp(ctx context.Context, pool *pgxpool.Pool) error {
 	db := stdlib.OpenDBFromPool(pool)
 	defer db.Close()
 	return migrations.RiverUp(ctx, db)
+}
+
+// Aplica as migrações do schema da aplicação adaptando [pgxpool.Pool] para
+// [sql.DB].
+func migrationsUp(ctx context.Context, pool *pgxpool.Pool) error {
+	db := stdlib.OpenDBFromPool(pool)
+	defer db.Close()
+	return migrations.Up(ctx, db)
 }
