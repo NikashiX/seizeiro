@@ -30,6 +30,7 @@ func (app *application) newMCPServer() *mcp.Server {
 
 	registerDocumentosTools(server, app)
 	registerProcessosTools(server, app)
+	registerMarcadoresTools(server, app)
 
 	return server
 }

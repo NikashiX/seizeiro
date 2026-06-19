@@ -44,6 +44,9 @@ type application struct {
 	chatbotauth    *chatbotauth.Service
 	scraper        *sei.Scraper
 	chatbotWebhook *webhook.Notifier
+	// wsseiClients reaproveita instâncias de [*wssei.Client] por usuário do
+	// chatbot, evitando reautenticar no WSSEI a cada requisição.
+	wsseiClients *wsseiClientCache
 }
 
 func run() error {
@@ -147,6 +150,7 @@ func run() error {
 		chatbotauth:    chatAuth,
 		scraper:        sei.NewScraper(cfg.SEI.BaseURL),
 		chatbotWebhook: webhook.NewNotifier(cfg.ChatbotWebhook.URL, cfg.ChatbotWebhook.Secret),
+		wsseiClients:   newWSSEIClientCache(cfg.SEI.BaseURL),
 	}
 
 	srv := &http.Server{

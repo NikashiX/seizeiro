@@ -22,8 +22,9 @@ func registerDocumentosTools(server *mcp.Server, app *application) {
 	}, app.toolBaixarAnexo)
 }
 
-// resolveWSSEIClientByPlataforma recria um [*wssei.Client] autenticado a partir
-// dos identificadores externos do usuário do chatbot.
+// resolveWSSEIClientByPlataforma devolve um [*wssei.Client] autenticado a partir
+// dos identificadores externos do usuário do chatbot, reaproveitando a
+// instância via [application.wsseiClients] quando possível.
 //
 // Retorna [chatbotauth.ErrNotFound] (já tratado pelos toolers) quando o usuário
 // não tem cadastro ativo.
@@ -41,12 +42,7 @@ func resolveWSSEIClientByPlataforma(
 		return nil, fmt.Errorf("get usuario: %w", err)
 	}
 
-	return wssei.NewClient(wssei.Config{
-		BaseURL: app.cfg.SEI.BaseURL,
-		Usuario: usuario.SEIUsuario,
-		Senha:   usuario.SEISenha,
-		Orgao:   usuario.SEIOrgao,
-	}), nil
+	return app.wsseiClients.Get(usuario), nil
 }
 
 // toolNotFoundResult devolve um resultado MCP de erro com mensagem amigável

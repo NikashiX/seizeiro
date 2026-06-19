@@ -42,12 +42,7 @@ func resolveWSSEIClient(
 		return nil, fmt.Errorf("get usuario: %w", err)
 	}
 
-	return wssei.NewClient(wssei.Config{
-		BaseURL: app.cfg.SEI.BaseURL,
-		Usuario: usuario.SEIUsuario,
-		Senha:   usuario.SEISenha,
-		Orgao:   usuario.SEIOrgao,
-	}), nil
+	return app.wsseiClients.Get(usuario), nil
 }
 
 // registerDocumentos registra os endpoints HTTP que expõem as operações de
