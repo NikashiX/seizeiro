@@ -17,7 +17,10 @@ import (
 
 // Header enviado pelo notifier quando há segredo configurado. O receptor deve
 // comparar o valor com o segredo compartilhado antes de processar o payload.
-const SecretHeader = "X-Webhook-Secret"
+//
+// Usamos `Authorization` (sem o esquema `Bearer`) para casar com o contrato
+// do whatsapp-sim em dev, que valida `Authorization == segredo`.
+const SecretHeader = "Authorization"
 
 // requestTimeout limita o tempo de cada chamada HTTP. Webhooks devem ser
 // rápidos; quem precisa de processamento demorado deve responder logo e

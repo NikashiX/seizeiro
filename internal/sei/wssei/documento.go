@@ -1,14 +1,26 @@
 package wssei
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 )
+
+// ErrDocumentoNaoEncontrado é retornado por [Client.ResolverIDDocumentoPorNumero]
+// quando nenhum documento corresponde ao número formatado pesquisado.
+var ErrDocumentoNaoEncontrado = errors.New("documento não encontrado")
+
+// ErrDocumentoAmbiguo é retornado por [Client.ResolverIDDocumentoPorNumero]
+// quando mais de um documento corresponde ao número formatado pesquisado e
+// não é possível decidir com segurança qual baixar.
+var ErrDocumentoAmbiguo = errors.New("documento ambíguo")
 
 // ConsultarDocumentoInterno retorna os metadados do Documento Interno.
 func (c *Client) ConsultarDocumentoInterno(ctx context.Context, protocolo int) (*DocumentoInterno, error) {
@@ -140,6 +152,203 @@ func (c *Client) BaixarAnexo(ctx context.Context, protocolo int) (io.ReadCloser,
 	contentType := resp.Header.Get("Content-Type")
 
 	return resp.Body, contentType, nil
+}
+
+// PesquisarGeralParams reúne os parâmetros opcionais de [Client.PesquisarGeral].
+//
+// Campos com valor zero ("" ou 0) são omitidos da requisição.
+type PesquisarGeralParams struct {
+	// BuscaRapida replica o comportamento da busca rápida da interface web:
+	// quando informado, os demais filtros são ignorados pelo WSSEI.
+	BuscaRapida string
+	// PalavrasChave é o texto da pesquisa avançada.
+	PalavrasChave string
+	// Limit é o limite de registros da paginação.
+	Limit int
+	// Start é a página de início da paginação.
+	Start int
+}
+
+// Converte os parâmetros em [url.Values], omitindo os campos zerados.
+func (p PesquisarGeralParams) values() url.Values {
+	q := make(url.Values)
+	if p.BuscaRapida != "" {
+		q.Set("buscaRapida", p.BuscaRapida)
+	}
+	if p.PalavrasChave != "" {
+		q.Set("palavrasChave", p.PalavrasChave)
+	}
+	if p.Limit != 0 {
+		q.Set("limit", strconv.Itoa(p.Limit))
+	}
+	if p.Start != 0 {
+		q.Set("start", strconv.Itoa(p.Start))
+	}
+	return q
+}
+
+// ResultadoPesquisaGeral representa um item retornado por
+// [Client.PesquisarGeral].
+//
+// O WSSEI pode enviar `documento` como objeto único, como array de objetos ou
+// como string vazia. Por isso o campo é uma [ResultadoPesquisaGeralDocumentos]
+// que normaliza essas variantes em uma lista.
+type ResultadoPesquisaGeral struct {
+	IDProcedimento                 string                          `json:"idProcedimento"`
+	IDTipoProcedimento             string                          `json:"idTipoProcedimento"`
+	NomeTipoProcedimento           string                          `json:"nomeTipoProcedimento"`
+	SiglaUnidadeGeradora           string                          `json:"siglaUnidadeGeradora"`
+	IDUnidadeGeradora              string                          `json:"idUnidadeGeradora"`
+	ProtocoloFormatadoProcedimento string                          `json:"protocoloFormatadoProcedimento"`
+	IDUsuarioGerador               string                          `json:"idUsuarioGerador"`
+	NomeUsuarioGerador             string                          `json:"nomeUsuarioGerador"`
+	SiglaUsuarioGerador            string                          `json:"siglaUsuarioGerador"`
+	DataGeracao                    string                          `json:"dataGeracao"`
+	Documento                      ResultadoPesquisaGeralDocumentos `json:"documento"`
+}
+
+// ResultadoPesquisaGeralDocumentos normaliza o campo `documento` dos resultados
+// de pesquisa, que o WSSEI envia ora como objeto único, ora como array, ora
+// como string vazia.
+type ResultadoPesquisaGeralDocumentos []ResultadoPesquisaGeralDocumento
+
+// UnmarshalJSON aceita objeto único `{...}`, array `[...]` ou as formas vazias
+// `""`/`null`/`[]`/`{}`. Sempre produz uma lista (possivelmente vazia).
+func (d *ResultadoPesquisaGeralDocumentos) UnmarshalJSON(data []byte) error {
+	trimmed := bytes.TrimSpace(data)
+	switch string(trimmed) {
+	case "", `""`, "null", "[]", "{}":
+		*d = nil
+		return nil
+	}
+	if len(trimmed) > 0 && trimmed[0] == '[' {
+		var items []ResultadoPesquisaGeralDocumento
+		if err := json.Unmarshal(trimmed, &items); err != nil {
+			return err
+		}
+		*d = items
+		return nil
+	}
+	var item ResultadoPesquisaGeralDocumento
+	if err := json.Unmarshal(trimmed, &item); err != nil {
+		return err
+	}
+	*d = []ResultadoPesquisaGeralDocumento{item}
+	return nil
+}
+
+// ResultadoPesquisaGeralDocumento reúne os dados do documento referenciado
+// por um [ResultadoPesquisaGeral].
+type ResultadoPesquisaGeralDocumento struct {
+	IDDocumento                 string `json:"idDocumento"`
+	IDSerieDocumento            string `json:"idSerieDocumento"`
+	NomeSerieDocumento          string `json:"nomeSerieDocumento"`
+	ProtocoloFormatadoDocumento string `json:"protocoloFormatadoDocumento"`
+	NumeroDocumento             string `json:"numeroDocumento"`
+	StaDocumento                string `json:"staDocumento"`
+	DtaGeracao                  string `json:"dtaGeracao"`
+}
+
+// PesquisarGeral chama o endpoint `/processo/pesquisar` do WSSEI e retorna a
+// lista de resultados e o total.
+func (c *Client) PesquisarGeral(ctx context.Context, params PesquisarGeralParams) ([]ResultadoPesquisaGeral, int, error) {
+	endpoint := c.endpoint + "/processo/pesquisar"
+	if q := params.values().Encode(); q != "" {
+		endpoint += "?" + q
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, 0, fmt.Errorf("new request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+
+	res, err := c.http.Do(req)
+	if err != nil {
+		return nil, 0, fmt.Errorf("http do: %w", err)
+	}
+	defer res.Body.Close()
+
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, 0, fmt.Errorf("read body: %w", err)
+	}
+
+	if res.StatusCode != http.StatusOK {
+		return nil, 0, fmt.Errorf("unexpected status %d: %s", res.StatusCode, strings.TrimSpace(string(body)))
+	}
+
+	var env Envelope[[]ResultadoPesquisaGeral]
+	if err := json.Unmarshal(body, &env); err != nil {
+		return nil, 0, fmt.Errorf("json unmarshal: %w", err)
+	}
+
+	if !env.Sucesso {
+		return nil, 0, fmt.Errorf("invalid response: %s", env.Mensagem)
+	}
+
+	total, err := env.getTotal()
+	if err != nil {
+		return nil, 0, fmt.Errorf("parse total %q: %w", env.Total, err)
+	}
+
+	return env.Data, total, nil
+}
+
+// ResolverIDDocumentoPorNumero busca o id interno do documento (`idDocumento`)
+// a partir do número formatado exibido na interface do SEI (ex: "0107523").
+//
+// Internamente consulta [Client.PesquisarGeral] usando `buscaRapida` e filtra
+// pelos itens cujo `protocoloFormatadoDocumento` bate exatamente com o número
+// informado.
+//
+// Retorna [ErrDocumentoNaoEncontrado] quando a pesquisa não devolve nenhum
+// resultado correspondente e [ErrDocumentoAmbiguo] quando existem múltiplos
+// `idDocumento` distintos para o mesmo número.
+func (c *Client) ResolverIDDocumentoPorNumero(ctx context.Context, numero string) (int, error) {
+	numero = strings.TrimSpace(numero)
+	if numero == "" {
+		return 0, fmt.Errorf("numero vazio")
+	}
+
+	resultados, _, err := c.PesquisarGeral(ctx, PesquisarGeralParams{PalavrasChave: numero})
+	if err != nil {
+		return 0, fmt.Errorf("pesquisar geral: %w", err)
+	}
+
+	// Coleta os ids distintos de documentos cujo protocolo formatado bate
+	// exatamente. Vários itens podem repetir o mesmo idDocumento (um documento
+	// presente em mais de um processo do resultado), por isso deduplicamos
+	// antes de decidir se a busca é ambígua.
+	idsDistintos := make(map[string]struct{})
+	for _, r := range resultados {
+		for _, doc := range r.Documento {
+			if doc.IDDocumento == "" {
+				continue
+			}
+			if strings.TrimSpace(doc.ProtocoloFormatadoDocumento) != numero {
+				continue
+			}
+			idsDistintos[doc.IDDocumento] = struct{}{}
+		}
+	}
+
+	switch len(idsDistintos) {
+	case 0:
+		return 0, ErrDocumentoNaoEncontrado
+	case 1:
+		var id string
+		for k := range idsDistintos {
+			id = k
+		}
+		parsed, err := strconv.Atoi(id)
+		if err != nil {
+			return 0, fmt.Errorf("parse idDocumento %q: %w", id, err)
+		}
+		return parsed, nil
+	default:
+		return 0, ErrDocumentoAmbiguo
+	}
 }
 
 // PesquisarTipoTemplateDocumento retorna a lista de Templates do Documento.
