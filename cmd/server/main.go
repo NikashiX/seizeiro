@@ -3,13 +3,17 @@ package main
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"log"
+	"net/http"
+	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
 	"github.com/automatiza-mg/seizeiro/internal/arquivo"
 	"github.com/automatiza-mg/seizeiro/internal/arquivo/conteudo"
+	chatbotauth "github.com/automatiza-mg/seizeiro/internal/auth/chatbot"
 	"github.com/automatiza-mg/seizeiro/internal/blob"
 	"github.com/automatiza-mg/seizeiro/internal/config"
 	"github.com/automatiza-mg/seizeiro/internal/database"
@@ -17,6 +21,7 @@ import (
 	"github.com/automatiza-mg/seizeiro/internal/llm"
 	"github.com/automatiza-mg/seizeiro/internal/mailer"
 	"github.com/automatiza-mg/seizeiro/internal/postgres/migrations"
+	"github.com/automatiza-mg/seizeiro/internal/sei"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/joho/godotenv"
@@ -29,6 +34,14 @@ func main() {
 	if err := run(); err != nil {
 		log.Fatal(err)
 	}
+}
+
+type application struct {
+	cfg         *config.Config
+	pool        *pgxpool.Pool
+	views       fs.FS
+	chatbotauth *chatbotauth.Service
+	scraper     *sei.Scraper
 }
 
 func run() error {
@@ -106,10 +119,48 @@ func run() error {
 		return fmt.Errorf("river start: %w", err)
 	}
 
-	<-ctx.Done()
+	encKey, err := cfg.Key()
+	if err != nil {
+		return fmt.Errorf("config key: %w", err)
+	}
+
+	chatAuth, err := chatbotauth.NewService(pool, encKey)
+	if err != nil {
+		return fmt.Errorf("chatbot auth: %w", err)
+	}
+
+	app := &application{
+		cfg:         cfg,
+		pool:        pool,
+		views:       os.DirFS("web/views"),
+		chatbotauth: chatAuth,
+		scraper:     sei.NewScraper(cfg.SEI.BaseURL),
+	}
+
+	srv := &http.Server{
+		Addr:    ":4000",
+		Handler: app.routes(),
+	}
+
+	serverErr := make(chan error, 1)
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			serverErr <- err
+		}
+	}()
+
+	select {
+	case <-ctx.Done():
+	case err := <-serverErr:
+		return fmt.Errorf("http server: %w", err)
+	}
 
 	stopCtx, stopCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer stopCancel()
+
+	if err := srv.Shutdown(stopCtx); err != nil {
+		return fmt.Errorf("http shutdown: %w", err)
+	}
 
 	if err := riverClient.Stop(stopCtx); err != nil {
 		return fmt.Errorf("river stop: %w", err)

@@ -57,7 +57,7 @@ func (q *Queries) GetTokenChatbot(ctx context.Context, hash []byte) (TokenChatbo
 }
 
 const getUsuarioChatbot = `-- name: GetUsuarioChatbot :one
-SELECT plataforma, plataforma_id, sei_usuario, sei_senha, criado_em
+SELECT plataforma, plataforma_id, sei_usuario, sei_senha, criado_em, sei_orgao
 FROM usuarios_chatbot
 WHERE plataforma = $1
 AND plataforma_id = $2
@@ -77,6 +77,7 @@ func (q *Queries) GetUsuarioChatbot(ctx context.Context, arg GetUsuarioChatbotPa
 		&i.SEIUsuario,
 		&i.SEISenha,
 		&i.CriadoEm,
+		&i.SEIOrgao,
 	)
 	return i, err
 }
@@ -104,11 +105,12 @@ func (q *Queries) SaveTokenChatbot(ctx context.Context, arg SaveTokenChatbotPara
 }
 
 const saveUsuarioChatbot = `-- name: SaveUsuarioChatbot :exec
-INSERT INTO usuarios_chatbot (plataforma, plataforma_id, sei_usuario, sei_senha)
-VALUES ($1, $2, $3, $4)
+INSERT INTO usuarios_chatbot (plataforma, plataforma_id, sei_usuario, sei_senha, sei_orgao)
+VALUES ($1, $2, $3, $4, $5)
 ON CONFLICT (plataforma, plataforma_id) DO UPDATE SET
     sei_usuario = EXCLUDED.sei_usuario,
-    sei_senha = EXCLUDED.sei_senha
+    sei_senha = EXCLUDED.sei_senha,
+    sei_orgao = EXCLUDED.sei_orgao
 `
 
 type SaveUsuarioChatbotParams struct {
@@ -116,6 +118,7 @@ type SaveUsuarioChatbotParams struct {
 	PlataformaID string
 	SEIUsuario   string
 	SEISenha     []byte
+	SEIOrgao     int32
 }
 
 func (q *Queries) SaveUsuarioChatbot(ctx context.Context, arg SaveUsuarioChatbotParams) error {
@@ -124,6 +127,7 @@ func (q *Queries) SaveUsuarioChatbot(ctx context.Context, arg SaveUsuarioChatbot
 		arg.PlataformaID,
 		arg.SEIUsuario,
 		arg.SEISenha,
+		arg.SEIOrgao,
 	)
 	return err
 }

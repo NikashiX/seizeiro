@@ -68,4 +68,5 @@ type UsuarioChatbot struct {
 	SEIUsuario   string
 	SEISenha     []byte
 	CriadoEm     pgtype.Timestamptz
+	SEIOrgao     int32
 }

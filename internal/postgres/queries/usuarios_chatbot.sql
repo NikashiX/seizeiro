@@ -5,11 +5,12 @@ WHERE plataforma = $1
 AND plataforma_id = $2;
 
 -- name: SaveUsuarioChatbot :exec
-INSERT INTO usuarios_chatbot (plataforma, plataforma_id, sei_usuario, sei_senha)
-VALUES ($1, $2, $3, $4)
+INSERT INTO usuarios_chatbot (plataforma, plataforma_id, sei_usuario, sei_senha, sei_orgao)
+VALUES ($1, $2, $3, $4, $5)
 ON CONFLICT (plataforma, plataforma_id) DO UPDATE SET
     sei_usuario = EXCLUDED.sei_usuario,
-    sei_senha = EXCLUDED.sei_senha;
+    sei_senha = EXCLUDED.sei_senha,
+    sei_orgao = EXCLUDED.sei_orgao;
 
 -- name: SaveTokenChatbot :exec
 INSERT INTO tokens_chatbot (hash, plataforma, plataforma_id, expira_em)

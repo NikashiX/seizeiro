@@ -32,6 +32,7 @@ type Usuario struct {
 	PlataformaID string    `json:"plataforma_id"`
 	SEIUsuario   string    `json:"sei_usuario"`
 	SEISenha     string    `json:"sei_senha"`
+	SEIOrgao     int       `json:"sei_orgao"`
 	CriadoEm     time.Time `json:"criado_em"`
 }
 
@@ -139,6 +140,7 @@ func (s *Service) CreateUsuario(ctx context.Context, params CreateUsuarioParams)
 		PlataformaID: tokenRow.PlataformaID,
 		SEIUsuario:   params.SEIUsuario,
 		SEISenha:     senha,
+		SEIOrgao:     int32(params.SEIOrgao),
 	})
 	if err != nil {
 		return fmt.Errorf("save usuario chatbot: %w", err)
@@ -177,6 +179,7 @@ func (s *Service) GetUsuario(ctx context.Context, plataforma, plataformaID strin
 		PlataformaID: row.PlataformaID,
 		SEIUsuario:   row.SEIUsuario,
 		SEISenha:     string(senha),
+		SEIOrgao:     int(row.SEIOrgao),
 		CriadoEm:     row.CriadoEm.Time,
 	}, nil
 }

@@ -17,3 +17,4 @@ sql:
           usuarios_chatbot: UsuarioChatbot
           sei_usuario: SEIUsuario
           sei_senha: SEISenha
+          sei_orgao: SEIOrgao
