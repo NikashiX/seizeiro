@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/subtle"
 	"errors"
 	"fmt"
 	"io"
@@ -10,7 +11,9 @@ import (
 
 	"github.com/automatiza-mg/seizeiro/internal/auth"
 	chatbotauth "github.com/automatiza-mg/seizeiro/internal/auth/chatbot"
+	"github.com/automatiza-mg/seizeiro/internal/sei/seiws"
 	"github.com/automatiza-mg/seizeiro/internal/sei/wssei"
+	"github.com/automatiza-mg/seizeiro/internal/soap"
 	"github.com/danielgtaylor/huma/v2"
 )
 
@@ -54,6 +57,76 @@ func registerDocumentos(api huma.API, pathPrefix string, app *application) {
 	registerGetDocumentoAnexo(api, pathPrefix, app)
 	registerGetDocumentoTemplate(api, pathPrefix, app)
 	registerListDocumentosProcesso(api, pathPrefix, app)
+	registerGetDocumentoSOAP(api, pathPrefix, app)
+}
+
+// checkSecretKey valida o header Authorization no formato `Bearer <SECRET_KEY>`
+// contra o valor configurado em SECRET_KEY. Usa comparação em tempo constante
+// para evitar timing attacks.
+func checkSecretKey(authorization, secretKey string) error {
+	token, ok := strings.CutPrefix(authorization, "Bearer ")
+	token = strings.TrimSpace(token)
+	if !ok || token == "" {
+		return huma.Error401Unauthorized("authorization bearer token obrigatório")
+	}
+	if subtle.ConstantTimeCompare([]byte(token), []byte(secretKey)) != 1 {
+		return huma.Error401Unauthorized("token inválido")
+	}
+	return nil
+}
+
+// GetDocumentoSOAPRequest contém os parâmetros para consulta de um documento
+// pela API SOAP legada do SEI (SeiWS.php).
+type GetDocumentoSOAPRequest struct {
+	Authorization string `header:"Authorization" required:"true" doc:"Bearer <SECRET_KEY>"`
+	Protocolo     string `path:"protocolo" doc:"Protocolo do documento (ex.: 0000000.00000.0000000/0000-00)"`
+}
+
+// GetDocumentoSOAPResponse devolve os metadados de um documento retornados
+// pela API SOAP legada do SEI.
+type GetDocumentoSOAPResponse struct {
+	Body seiws.RetornoConsultaDocumento
+}
+
+// registerGetDocumentoSOAP registra o endpoint de consulta de documento pela
+// API SOAP legada do SEI (SeiWS.php). Equivalente ao endpoint do projeto
+// `automatiza` que usa a versão antiga da API.
+func registerGetDocumentoSOAP(api huma.API, pathPrefix string, app *application) {
+	huma.Register(api, huma.Operation{
+		OperationID: "get-documento-soap",
+		Method:      http.MethodGet,
+		Path:        pathPrefix + "/documentos/soap/{protocolo}",
+		Tags:        []string{"Documentos"},
+		Summary:     "Consulta metadados de um documento via API SOAP legada do SEI",
+		Description: "Usa o endpoint SeiWS.php (API antiga) para consultar metadados de um documento pelo protocolo. " +
+			"Autenticação via Bearer com SECRET_KEY.",
+	}, func(ctx context.Context, in *GetDocumentoSOAPRequest) (*GetDocumentoSOAPResponse, error) {
+		if err := checkSecretKey(in.Authorization, app.cfg.SecretKey); err != nil {
+			return nil, err
+		}
+
+		if app.seiws == nil {
+			return nil, huma.Error503ServiceUnavailable(
+				"integração com a API SOAP do SEI não configurada (SEI_WS_URL/SEI_SIGLA_SISTEMA/SEI_IDENTIFICACAO_SERVICO)",
+			)
+		}
+
+		protocolo := strings.TrimSpace(in.Protocolo)
+		if protocolo == "" {
+			return nil, huma.Error400BadRequest("protocolo obrigatório")
+		}
+
+		resp, err := app.seiws.ConsultarDocumento(ctx, protocolo)
+		if err != nil {
+			var soapErr *soap.Error
+			if errors.As(err, &soapErr) {
+				return nil, huma.Error400BadRequest(soapErr.Error())
+			}
+			return nil, fmt.Errorf("consultar documento soap: %w", err)
+		}
+
+		return &GetDocumentoSOAPResponse{Body: resp.Parametros}, nil
+	})
 }
 
 // GetDocumentoInternoRequest contém os parâmetros para consulta de um documento

@@ -46,6 +46,15 @@ type SMTP struct {
 // SEI contém as configurações de acesso às APIs do SEI.
 type SEI struct {
 	BaseURL string `env:"SEI_BASE_URL,notEmpty"`
+	// WSURL é o endpoint completo da API SOAP legada (SeiWS.php). Quando vazio,
+	// as operações que usam essa API devolvem erro de configuração.
+	WSURL string `env:"SEI_WS_URL"`
+	// SiglaSistema é o identificador do sistema chamador cadastrado no SEI,
+	// usado pela API SOAP legada.
+	SiglaSistema string `env:"SEI_SIGLA_SISTEMA"`
+	// IdentificacaoServico é o token/segredo do sistema cadastrado no SEI,
+	// usado pela API SOAP legada.
+	IdentificacaoServico string `env:"SEI_IDENTIFICACAO_SERVICO" json:"-"`
 }
 
 // ChatbotWebhook contém as configurações do webhook notificado quando o

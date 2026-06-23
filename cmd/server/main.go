@@ -22,6 +22,7 @@ import (
 	"github.com/automatiza-mg/seizeiro/internal/mailer"
 	"github.com/automatiza-mg/seizeiro/internal/postgres/migrations"
 	"github.com/automatiza-mg/seizeiro/internal/sei"
+	"github.com/automatiza-mg/seizeiro/internal/sei/seiws"
 	"github.com/automatiza-mg/seizeiro/internal/webhook"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
@@ -47,6 +48,11 @@ type application struct {
 	// wsseiClients reaproveita instâncias de [*wssei.Client] por usuário do
 	// chatbot, evitando reautenticar no WSSEI a cada requisição.
 	wsseiClients *wsseiClientCache
+	// seiws é o cliente da API SOAP legada do SEI (SeiWS.php). É opcional:
+	// quando as variáveis SEI_WS_URL/SEI_SIGLA_SISTEMA/SEI_IDENTIFICACAO_SERVICO
+	// não estão configuradas, ele fica nil e as rotas correspondentes devolvem
+	// um erro 503.
+	seiws *seiws.Client
 }
 
 func run() error {
@@ -151,6 +157,7 @@ func run() error {
 		scraper:        sei.NewScraper(cfg.SEI.BaseURL),
 		chatbotWebhook: webhook.NewNotifier(cfg.ChatbotWebhook.URL, cfg.ChatbotWebhook.Secret),
 		wsseiClients:   newWSSEIClientCache(cfg.SEI.BaseURL),
+		seiws:          newSEIWSClient(cfg.SEI),
 	}
 
 	srv := &http.Server{
@@ -183,6 +190,20 @@ func run() error {
 	}
 
 	return nil
+}
+
+// newSEIWSClient cria o cliente da API SOAP legada do SEI quando todas as
+// variáveis necessárias estão configuradas. Retorna nil caso contrário,
+// permitindo que a aplicação suba sem essa integração.
+func newSEIWSClient(cfg config.SEI) *seiws.Client {
+	if cfg.WSURL == "" || cfg.SiglaSistema == "" || cfg.IdentificacaoServico == "" {
+		return nil
+	}
+	return seiws.NewClient(seiws.Config{
+		URL:                  cfg.WSURL,
+		SiglaSistema:         cfg.SiglaSistema,
+		IdentificacaoServico: cfg.IdentificacaoServico,
+	})
 }
 
 // Cria o backend de armazenamento de acordo com a configuração.

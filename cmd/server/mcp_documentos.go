@@ -6,9 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 
 	chatbotauth "github.com/automatiza-mg/seizeiro/internal/auth/chatbot"
+	"github.com/automatiza-mg/seizeiro/internal/sei/seiws"
 	"github.com/automatiza-mg/seizeiro/internal/sei/wssei"
+	"github.com/automatiza-mg/seizeiro/internal/soap"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -20,6 +23,17 @@ func registerDocumentosTools(server *mcp.Server, app *application) {
 		Name:        "documento_baixar_anexo",
 		Description: "Baixa o conteúdo binário de um documento externo (anexo) do SEI a partir do id interno (idDocumento/idProtocolo) e devolve o arquivo codificado em base64.",
 	}, app.toolBaixarAnexo)
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "documento_listar_processo",
+		Description: "Lista paginada de documentos de um processo do SEI a partir do id interno do procedimento. Devolve a lista de documentos e o total de registros disponíveis.",
+	}, app.toolListarDocumentosProcesso)
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name: "documento_consultar_soap",
+		Description: "Consulta os metadados de um documento do SEI pela API SOAP legada (SeiWS.php), usando o protocolo formatado (ex.: 0000000.00000.0000000/0000-00). " +
+			"Usa credenciais globais da aplicação (SiglaSistema/IdentificacaoServico) — não requer plataforma/plataforma_id.",
+	}, app.toolConsultarDocumentoSOAP)
 }
 
 // resolveWSSEIClientByPlataforma devolve um [*wssei.Client] autenticado a partir
@@ -101,4 +115,107 @@ func (app *application) toolBaixarAnexo(
 		Bytes:       len(data),
 		DataBase64:  base64.StdEncoding.EncodeToString(data),
 	}, nil
+}
+
+// ListarDocumentosProcessoInput agrupa as entradas da tool
+// [toolListarDocumentosProcesso].
+//
+// Os campos opcionais com valor zero são omitidos da requisição ao WSSEI.
+type ListarDocumentosProcessoInput struct {
+	Plataforma   string `json:"plataforma" jsonschema:"identificador da plataforma externa (ex: whatsapp, telegram)"`
+	PlataformaID string `json:"plataforma_id" jsonschema:"identificador do usuário dentro da plataforma"`
+	Procedimento int    `json:"procedimento" jsonschema:"id interno do processo (procedimento) no SEI"`
+	Limit        int    `json:"limit,omitempty" jsonschema:"limite de registros da paginação"`
+	Start        int    `json:"start,omitempty" jsonschema:"página de início da paginação"`
+}
+
+// ListarDocumentosProcessoOutput devolve a lista de documentos e o total de
+// registros retornados pelo WSSEI.
+type ListarDocumentosProcessoOutput struct {
+	Total      int               `json:"total" jsonschema:"total de registros disponíveis no WSSEI"`
+	Documentos []wssei.Documento `json:"documentos" jsonschema:"documentos retornados pela página atual"`
+}
+
+func (app *application) toolListarDocumentosProcesso(
+	ctx context.Context,
+	_ *mcp.CallToolRequest,
+	in ListarDocumentosProcessoInput,
+) (*mcp.CallToolResult, ListarDocumentosProcessoOutput, error) {
+	client, err := resolveWSSEIClientByPlataforma(ctx, app, in.Plataforma, in.PlataformaID)
+	if err != nil {
+		if errors.Is(err, chatbotauth.ErrNotFound) {
+			return toolNotFoundResult(), ListarDocumentosProcessoOutput{}, nil
+		}
+		return nil, ListarDocumentosProcessoOutput{}, err
+	}
+
+	docs, total, err := client.ListarDocumentosProcessos(ctx, wssei.ListarDocumentosParams{
+		Limit:        in.Limit,
+		Start:        in.Start,
+		Procedimento: in.Procedimento,
+	})
+	if err != nil {
+		return nil, ListarDocumentosProcessoOutput{}, fmt.Errorf("listar documentos processo: %w", err)
+	}
+
+	return nil, ListarDocumentosProcessoOutput{
+		Total:      total,
+		Documentos: docs,
+	}, nil
+}
+
+// ConsultarDocumentoSOAPInput agrupa as entradas da tool
+// [toolConsultarDocumentoSOAP].
+type ConsultarDocumentoSOAPInput struct {
+	Protocolo string `json:"protocolo" jsonschema:"protocolo formatado do documento (ex.: 0000000.00000.0000000/0000-00)"`
+}
+
+// ConsultarDocumentoSOAPOutput devolve os metadados do documento retornados
+// pela API SOAP legada do SEI.
+type ConsultarDocumentoSOAPOutput struct {
+	Documento seiws.RetornoConsultaDocumento `json:"documento" jsonschema:"metadados do documento retornados pela API SOAP do SEI"`
+}
+
+// toolSEIWSNotConfiguredResult devolve um resultado MCP de erro quando a
+// integração com a API SOAP legada do SEI não está configurada
+// (SEI_WS_URL / SEI_SIGLA_SISTEMA / SEI_IDENTIFICACAO_SERVICO).
+func toolSEIWSNotConfiguredResult() *mcp.CallToolResult {
+	return &mcp.CallToolResult{
+		IsError: true,
+		Content: []mcp.Content{&mcp.TextContent{
+			Text: "Integração com a API SOAP do SEI não configurada (SEI_WS_URL/SEI_SIGLA_SISTEMA/SEI_IDENTIFICACAO_SERVICO).",
+		}},
+	}
+}
+
+func (app *application) toolConsultarDocumentoSOAP(
+	ctx context.Context,
+	_ *mcp.CallToolRequest,
+	in ConsultarDocumentoSOAPInput,
+) (*mcp.CallToolResult, ConsultarDocumentoSOAPOutput, error) {
+	if app.seiws == nil {
+		return toolSEIWSNotConfiguredResult(), ConsultarDocumentoSOAPOutput{}, nil
+	}
+
+	protocolo := strings.TrimSpace(in.Protocolo)
+	if protocolo == "" {
+		return &mcp.CallToolResult{
+			IsError: true,
+			Content: []mcp.Content{&mcp.TextContent{Text: "protocolo é obrigatório"}},
+		}, ConsultarDocumentoSOAPOutput{}, nil
+	}
+
+	resp, err := app.seiws.ConsultarDocumento(ctx, protocolo)
+	if err != nil {
+		var soapErr *soap.Error
+		if errors.As(err, &soapErr) {
+			return &mcp.CallToolResult{
+				IsError: true,
+				Content: []mcp.Content{&mcp.TextContent{Text: soapErr.Error()}},
+			}, ConsultarDocumentoSOAPOutput{}, nil
+		}
+		return nil, ConsultarDocumentoSOAPOutput{}, fmt.Errorf("consultar documento soap: %w", err)
+	}
+
+	return nil, ConsultarDocumentoSOAPOutput{Documento: resp.Parametros}, nil
 }
