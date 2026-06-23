@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/automatiza-mg/seizeiro/internal/auth"
 	"github.com/automatiza-mg/seizeiro/internal/postgres"
 	"github.com/automatiza-mg/seizeiro/internal/security"
 	"github.com/jackc/pgx/v5"
@@ -109,7 +108,7 @@ type CreateUsuarioParams struct {
 
 // CreateUsuario registra as credenciais SEI de um usuário do chatbot a partir de um token criado por
 // [Service.CreateToken]. Caso o usuário já exista, suas credenciais são atualizadas. O token é de uso
-// único e é consumido após o registro. Retorna [auth.ErrInvalidToken] caso o token seja inválido ou
+// único e é consumido após o registro. Retorna [ErrInvalidToken] caso o token seja inválido ou
 // expirado.
 func (s *Service) CreateUsuario(ctx context.Context, params CreateUsuarioParams) error {
 	hash := sha256.Sum256([]byte(params.Token))
@@ -117,7 +116,7 @@ func (s *Service) CreateUsuario(ctx context.Context, params CreateUsuarioParams)
 	tokenRow, err := s.q.GetTokenChatbot(ctx, hash[:])
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return auth.ErrInvalidToken
+			return ErrInvalidToken
 		}
 		return fmt.Errorf("get token chatbot: %w", err)
 	}
@@ -190,13 +189,13 @@ type TokenData struct {
 }
 
 // GetTokenData retorna os dados de cadastro de um token.
-// Se o token for inválido, retorna [auth.ErrInvalidToken].
+// Se o token for inválido, retorna [ErrInvalidToken].
 func (s *Service) GetTokenData(ctx context.Context, token string) (*TokenData, error) {
 	hash := sha256.Sum256([]byte(token))
 	row, err := s.q.GetTokenChatbot(ctx, hash[:])
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, auth.ErrInvalidToken
+			return nil, ErrInvalidToken
 		}
 		return nil, err
 	}

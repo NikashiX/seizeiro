@@ -11,7 +11,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/automatiza-mg/seizeiro/internal/auth"
 	chatbotauth "github.com/automatiza-mg/seizeiro/internal/auth/chatbot"
 	"github.com/automatiza-mg/seizeiro/internal/sei/wssei"
 	"github.com/automatiza-mg/seizeiro/internal/webhook"
@@ -61,7 +60,7 @@ func (app *application) handleCadastro(w http.ResponseWriter, r *http.Request) {
 	_, err := app.chatbotauth.GetTokenData(r.Context(), token)
 	if err != nil {
 		switch {
-		case errors.Is(err, auth.ErrInvalidToken):
+		case errors.Is(err, chatbotauth.ErrInvalidToken):
 			http.Redirect(w, r, "/cadastro/invalido", http.StatusFound)
 		default:
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
@@ -101,7 +100,7 @@ func (app *application) handleCadastroPost(w http.ResponseWriter, r *http.Reques
 	tokenData, err := app.chatbotauth.GetTokenData(r.Context(), token)
 	if err != nil {
 		switch {
-		case errors.Is(err, auth.ErrInvalidToken):
+		case errors.Is(err, chatbotauth.ErrInvalidToken):
 			http.Redirect(w, r, "/cadastro/invalido", http.StatusSeeOther)
 		default:
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)

@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/automatiza-mg/seizeiro/internal/auth"
 	chatbotauth "github.com/automatiza-mg/seizeiro/internal/auth/chatbot"
 	"github.com/automatiza-mg/seizeiro/internal/sei/seiws"
 	"github.com/automatiza-mg/seizeiro/internal/sei/wssei"
@@ -30,7 +29,7 @@ func resolveWSSEIClient(
 
 	tokenData, err := app.chatbotauth.GetTokenData(ctx, token)
 	if err != nil {
-		if errors.Is(err, auth.ErrInvalidToken) {
+		if errors.Is(err, chatbotauth.ErrInvalidToken) {
 			return nil, huma.Error401Unauthorized("token inválido ou expirado")
 		}
 		return nil, fmt.Errorf("get token data: %w", err)

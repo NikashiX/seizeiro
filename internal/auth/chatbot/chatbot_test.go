@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/automatiza-mg/seizeiro/internal/auth"
 	"github.com/automatiza-mg/seizeiro/internal/database"
 	"github.com/automatiza-mg/seizeiro/internal/postgres"
 	"github.com/google/go-cmp/cmp"
@@ -180,7 +179,7 @@ func TestCreateToken_ReplacesPrevious(t *testing.T) {
 		SEIUsuario: "fulano.silva",
 		SEISenha:   "SenhaSecreta123",
 	})
-	if !errors.Is(err, auth.ErrInvalidToken) {
+	if !errors.Is(err, ErrInvalidToken) {
 		t.Fatalf("expected ErrInvalidToken, got %v", err)
 	}
 }
@@ -272,7 +271,7 @@ func TestCreateUsuario_TokenSingleUse(t *testing.T) {
 
 	// O token deve ser consumido após o primeiro uso.
 	err := f.service.CreateUsuario(t.Context(), params)
-	if !errors.Is(err, auth.ErrInvalidToken) {
+	if !errors.Is(err, ErrInvalidToken) {
 		t.Fatalf("expected ErrInvalidToken, got %v", err)
 	}
 }
@@ -286,7 +285,7 @@ func TestCreateUsuario_InvalidToken(t *testing.T) {
 		SEIUsuario: "fulano.silva",
 		SEISenha:   "SenhaSecreta123",
 	})
-	if !errors.Is(err, auth.ErrInvalidToken) {
+	if !errors.Is(err, ErrInvalidToken) {
 		t.Fatalf("expected ErrInvalidToken, got %v", err)
 	}
 }
@@ -315,7 +314,7 @@ func TestCreateUsuario_ExpiredToken(t *testing.T) {
 		SEIUsuario: "fulano.silva",
 		SEISenha:   "SenhaSecreta123",
 	})
-	if !errors.Is(err, auth.ErrInvalidToken) {
+	if !errors.Is(err, ErrInvalidToken) {
 		t.Fatalf("expected ErrInvalidToken, got %v", err)
 	}
 }

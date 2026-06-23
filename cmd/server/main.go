@@ -11,15 +11,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/automatiza-mg/seizeiro/internal/arquivo"
-	"github.com/automatiza-mg/seizeiro/internal/arquivo/conteudo"
 	chatbotauth "github.com/automatiza-mg/seizeiro/internal/auth/chatbot"
-	"github.com/automatiza-mg/seizeiro/internal/blob"
 	"github.com/automatiza-mg/seizeiro/internal/config"
 	"github.com/automatiza-mg/seizeiro/internal/database"
-	"github.com/automatiza-mg/seizeiro/internal/docintel"
-	"github.com/automatiza-mg/seizeiro/internal/llm"
-	"github.com/automatiza-mg/seizeiro/internal/mailer"
 	"github.com/automatiza-mg/seizeiro/internal/postgres/migrations"
 	"github.com/automatiza-mg/seizeiro/internal/sei"
 	"github.com/automatiza-mg/seizeiro/internal/sei/seiws"
@@ -83,40 +77,6 @@ func run() error {
 		return fmt.Errorf("river up: %w", err)
 	}
 
-	embedder, err := llm.NewOpenAIEmbedder(llm.OpenAIParams{
-		APIKey:     cfg.OpenAI.APIKey,
-		BaseURL:    cfg.OpenAI.BaseURL,
-		Model:      cfg.OpenAI.EmbeddingModel,
-		Dimensions: cfg.OpenAI.EmbeddingDimensions,
-		BatchSize:  cfg.OpenAI.EmbeddingBatchSize,
-	})
-	if err != nil {
-		return fmt.Errorf("embedder: %w", err)
-	}
-
-	tokenCounter, err := llm.NewTokenCounter(cfg.OpenAI.EmbeddingModel)
-	if err != nil {
-		return fmt.Errorf("token counter: %w", err)
-	}
-
-	storage, err := newStorage(cfg.Storage)
-	if err != nil {
-		return fmt.Errorf("storage: %w", err)
-	}
-
-	ocr := docintel.NewClient(cfg.DocIntel.Endpoint, cfg.DocIntel.Key)
-
-	smtpMailer, err := mailer.NewSMTPMailer(mailer.SMTPConfig{
-		User:        cfg.SMTP.User,
-		Password:    cfg.SMTP.Password,
-		Host:        cfg.SMTP.Host,
-		Port:        cfg.SMTP.Port,
-		FromAddress: cfg.SMTP.FromAddress,
-	})
-	if err != nil {
-		return fmt.Errorf("smtp mailer: %w", err)
-	}
-
 	workers := river.NewWorkers()
 	riverClient, err := river.NewClient(riverpgxv5.New(pool), &river.Config{
 		Queues: map[string]river.QueueConfig{
@@ -127,13 +87,6 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("river client: %w", err)
 	}
-
-	conteudoService := conteudo.NewService(pool, ocr, storage, embedder, tokenCounter, riverClient)
-	_ = arquivo.NewService(pool, storage, riverClient)
-
-	river.AddWorker(workers, conteudo.NewExtractConteudoWorker(conteudoService))
-	river.AddWorker(workers, conteudo.NewChunkConteudoWorker(conteudoService))
-	river.AddWorker(workers, mailer.NewWorker(smtpMailer))
 
 	if err := riverClient.Start(ctx); err != nil {
 		return fmt.Errorf("river start: %w", err)
@@ -204,14 +157,6 @@ func newSEIWSClient(cfg config.SEI) *seiws.Client {
 		SiglaSistema:         cfg.SiglaSistema,
 		IdentificacaoServico: cfg.IdentificacaoServico,
 	})
-}
-
-// Cria o backend de armazenamento de acordo com a configuração.
-func newStorage(cfg config.Storage) (blob.Storage, error) {
-	if cfg.AzureAccount != "" {
-		return blob.NewAzureStorage(cfg.AzureAccount, cfg.AzureContainer)
-	}
-	return blob.NewFilesystemStorage(cfg.FilesystemRoot)
 }
 
 // Aplica as migrações do River adaptando [pgxpool.Pool] para [sql.DB].
