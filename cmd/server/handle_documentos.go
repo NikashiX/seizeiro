@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto/subtle"
 	"errors"
 	"fmt"
 	"io"
@@ -60,25 +59,10 @@ func registerDocumentos(api huma.API, pathPrefix string, app *application) {
 	registerGetDocumentoSOAP(api, pathPrefix, app)
 }
 
-// checkSecretKey valida o header Authorization no formato `Bearer <SECRET_KEY>`
-// contra o valor configurado em SECRET_KEY. Usa comparação em tempo constante
-// para evitar timing attacks.
-func checkSecretKey(authorization, secretKey string) error {
-	token, ok := strings.CutPrefix(authorization, "Bearer ")
-	token = strings.TrimSpace(token)
-	if !ok || token == "" {
-		return huma.Error401Unauthorized("authorization bearer token obrigatório")
-	}
-	if subtle.ConstantTimeCompare([]byte(token), []byte(secretKey)) != 1 {
-		return huma.Error401Unauthorized("token inválido")
-	}
-	return nil
-}
-
 // GetDocumentoSOAPRequest contém os parâmetros para consulta de um documento
 // pela API SOAP legada do SEI (SeiWS.php).
 type GetDocumentoSOAPRequest struct {
-	Authorization string `header:"Authorization" required:"true" doc:"Bearer <SECRET_KEY>"`
+	Authorization string `header:"Authorization" required:"true" doc:"Bearer <token-do-chatbot>"`
 	Protocolo     string `path:"protocolo" doc:"Protocolo do documento (ex.: 0000000.00000.0000000/0000-00)"`
 }
 
@@ -91,6 +75,10 @@ type GetDocumentoSOAPResponse struct {
 // registerGetDocumentoSOAP registra o endpoint de consulta de documento pela
 // API SOAP legada do SEI (SeiWS.php). Equivalente ao endpoint do projeto
 // `automatiza` que usa a versão antiga da API.
+//
+// Exige o mesmo Bearer token do chatbot usado nas demais rotas de documento:
+// o usuário precisa estar cadastrado para chamar a rota, mesmo a chamada SOAP
+// em si usando credenciais globais (SiglaSistema/IdentificacaoServico).
 func registerGetDocumentoSOAP(api huma.API, pathPrefix string, app *application) {
 	huma.Register(api, huma.Operation{
 		OperationID: "get-documento-soap",
@@ -99,9 +87,12 @@ func registerGetDocumentoSOAP(api huma.API, pathPrefix string, app *application)
 		Tags:        []string{"Documentos"},
 		Summary:     "Consulta metadados de um documento via API SOAP legada do SEI",
 		Description: "Usa o endpoint SeiWS.php (API antiga) para consultar metadados de um documento pelo protocolo. " +
-			"Autenticação via Bearer com SECRET_KEY.",
+			"Autenticação via Bearer com token do chatbot — exige usuário cadastrado.",
 	}, func(ctx context.Context, in *GetDocumentoSOAPRequest) (*GetDocumentoSOAPResponse, error) {
-		if err := checkSecretKey(in.Authorization, app.cfg.SecretKey); err != nil {
+		// Valida o token do chatbot e garante que o usuário está cadastrado.
+		// O cliente WSSEI retornado não é usado: a chamada SOAP usa
+		// credenciais globais (SiglaSistema/IdentificacaoServico).
+		if _, err := resolveWSSEIClient(ctx, app, in.Authorization); err != nil {
 			return nil, err
 		}
 
