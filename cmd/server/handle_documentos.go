@@ -236,7 +236,7 @@ func registerGetDocumentoVisualizar(api huma.API, pathPrefix string, app *applic
 // de um documento externo.
 type GetDocumentoAnexoRequest struct {
 	Authorization string `header:"Authorization" required:"true" doc:"Bearer <token-do-chatbot>"`
-	Protocolo     int    `path:"protocolo" minimum:"1" doc:"Protocolo do documento externo"`
+	Protocolo     int    `path:"protocolo" minimum:"1" doc:"ID interno do documento externo (idProtocolo). Não usar o protocolo formatado (ex.: 0107523)."`
 }
 
 func registerGetDocumentoAnexo(api huma.API, pathPrefix string, app *application) {

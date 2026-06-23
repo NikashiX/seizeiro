@@ -20,18 +20,24 @@ import (
 // argumentos; o usuário/senha/órgão do SEI são lidos do cadastro persistido.
 func registerDocumentosTools(server *mcp.Server, app *application) {
 	mcp.AddTool(server, &mcp.Tool{
-		Name:        "documento_baixar_anexo",
-		Description: "Baixa o conteúdo binário de um documento externo (anexo) do SEI a partir do id interno (idDocumento/idProtocolo) e devolve o arquivo codificado em base64.",
+		Name: "documento_baixar_anexo",
+		Description: "Baixa o conteúdo binário de um documento externo (anexo) do SEI e devolve o arquivo codificado em base64. " +
+			"REQUER o id interno do documento (campo `id_protocolo`). " +
+			"NÃO use o protocolo formatado exibido ao usuário (ex.: 0107523). " +
+			"Para obter o id interno a partir do protocolo formatado, chame antes `documento_consultar_soap` e use o campo `id_documento` da resposta.",
 	}, app.toolBaixarAnexo)
 
 	mcp.AddTool(server, &mcp.Tool{
-		Name:        "documento_listar_processo",
-		Description: "Lista paginada de documentos de um processo do SEI a partir do id interno do procedimento. Devolve a lista de documentos e o total de registros disponíveis.",
+		Name: "documento_listar_processo",
+		Description: "Lista paginada de documentos de um processo do SEI a partir do id interno do procedimento. " +
+			"Para cada documento, devolve `atributos.protocoloFormatado` (string exibida ao usuário, ex.: 0107523). " +
+			"Para baixar o anexo de um item da lista, use o `protocoloFormatado` em `documento_consultar_soap` para obter o `id_documento` e então passe esse id em `documento_baixar_anexo`.",
 	}, app.toolListarDocumentosProcesso)
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name: "documento_consultar_soap",
-		Description: "Consulta os metadados de um documento do SEI pela API SOAP legada (SeiWS.php), usando o protocolo formatado (ex.: 0000000.00000.0000000/0000-00). " +
+		Description: "Consulta os metadados de um documento do SEI pela API SOAP legada (SeiWS.php), a partir do protocolo formatado (ex.: 0107523). " +
+			"Use esta tool para converter o protocolo formatado em `id_documento` (id interno), que é o valor exigido por `documento_baixar_anexo` (campo `id_protocolo`). " +
 			"Usa credenciais globais da aplicação (SiglaSistema/IdentificacaoServico) — não requer plataforma/plataforma_id.",
 	}, app.toolConsultarDocumentoSOAP)
 }
@@ -75,7 +81,10 @@ func toolNotFoundResult() *mcp.CallToolResult {
 type BaixarAnexoInput struct {
 	Plataforma   string `json:"plataforma" jsonschema:"identificador da plataforma externa (ex: whatsapp, telegram)"`
 	PlataformaID string `json:"plataforma_id" jsonschema:"identificador do usuário dentro da plataforma"`
-	Protocolo    int    `json:"protocolo" jsonschema:"protocolo do documento externo (anexo)"`
+	// IDProtocolo é o id interno do documento. Obtido a partir do campo
+	// `id_documento` retornado por `documento_consultar_soap`. NÃO confundir
+	// com o protocoloFormatado exibido ao usuário (ex.: 0107523).
+	IDProtocolo int `json:"id_protocolo" jsonschema:"id interno do documento externo (anexo). Equivalente ao campo id_documento devolvido por documento_consultar_soap. NÃO usar o protocolo formatado exibido ao usuário (ex.: 0107523)."`
 }
 
 // BaixarAnexoOutput devolve o conteúdo do anexo codificado em base64,
@@ -99,7 +108,7 @@ func (app *application) toolBaixarAnexo(
 		return nil, BaixarAnexoOutput{}, err
 	}
 
-	body, contentType, err := client.BaixarAnexo(ctx, in.Protocolo)
+	body, contentType, err := client.BaixarAnexo(ctx, in.IDProtocolo)
 	if err != nil {
 		return nil, BaixarAnexoOutput{}, fmt.Errorf("baixar anexo: %w", err)
 	}
