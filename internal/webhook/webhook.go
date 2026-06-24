@@ -1,8 +1,14 @@
 // Package webhook é responsável por notificar receptores HTTP externos sobre
-// eventos da aplicação (ex: cadastro de usuário do chatbot concluído).
+// eventos da aplicação (ex: cadastro de usuário do chatbot concluído,
+// arquivo do SEI baixado).
 //
 // O envio é best-effort: falhas não interrompem o fluxo do chamador. Quando a
-// URL configurada estiver vazia, [Notifier.NotifyCadastro] vira no-op.
+// URL configurada estiver vazia, todas as chamadas viram no-op.
+//
+// O [Notifier] usa uma URL base (sem o tipo de evento) e anexa o path
+// específico de cada notificação (ex: "/cadastro", "/arquivo"). Assim, a
+// configuração `CHATBOT_WEBHOOK_URL=http://localhost:3000/webhook` dispara
+// para `/webhook/cadastro` ou `/webhook/arquivo` conforme o evento.
 package webhook
 
 import (
@@ -12,6 +18,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -20,7 +27,7 @@ import (
 //
 // O nome `key` é o esperado pelo credential type "Header Auth" do n8n na
 // configuração de produção e é replicado pelo whatsapp-sim em dev.
-const SecretHeader = "key"
+const secretHeader = "key"
 
 // requestTimeout limita o tempo de cada chamada HTTP. Webhooks devem ser
 // rápidos; quem precisa de processamento demorado deve responder logo e
@@ -36,73 +43,109 @@ type CadastroEvent struct {
 	OcorridoEm   string `json:"ocorrido_em"`
 }
 
+// ArquivoPayload descreve um arquivo baixado do SEI, parte do [ArquivoEvent].
+type ArquivoPayload struct {
+	URL         string `json:"url"`
+	Nome        string `json:"nome,omitempty"`
+	ContentType string `json:"content_type"`
+	Bytes       int64  `json:"bytes"`
+	SHA256      string `json:"sha256"`
+}
+
+// ArquivoEvent é o payload enviado ao webhook quando o download de um anexo
+// do SEI termina. Em caso de erro, [ArquivoEvent.Arquivo] vem nulo e
+// [ArquivoEvent.Erro] contém a mensagem de falha.
+type ArquivoEvent struct {
+	Plataforma   string          `json:"plataforma"`
+	PlataformaID string          `json:"plataforma_id"`
+	Arquivo      *ArquivoPayload `json:"arquivo,omitempty"`
+	Mensagem     string          `json:"mensagem,omitempty"`
+	Erro         string          `json:"erro,omitempty"`
+	OcorridoEm   string          `json:"ocorrido_em"`
+}
+
 // Notifier dispara notificações HTTP para receptores externos.
 type Notifier struct {
-	url    string
-	secret string
-	http   *http.Client
+	baseURL string
+	secret  string
+	http    *http.Client
 }
 
-// NewNotifier cria um [*Notifier] que envia POSTs para url e injeta secret no
-// header [SecretHeader] quando definido. Quando url é vazia, o notifier é
-// criado mesmo assim e as chamadas viram no-op (útil em dev/local).
-func NewNotifier(url, secret string) *Notifier {
+// NewNotifier cria um [*Notifier] que envia POSTs para baseURL anexando o
+// path do evento (ex: "/cadastro"). O secret, quando definido, é enviado no
+// header `key`. Quando baseURL é vazia, o notifier vira no-op (útil em
+// dev/local).
+func NewNotifier(baseURL, secret string) *Notifier {
 	return &Notifier{
-		url:    url,
-		secret: secret,
-		http:   &http.Client{Timeout: requestTimeout},
+		baseURL: strings.TrimRight(baseURL, "/"),
+		secret:  secret,
+		http:    &http.Client{Timeout: requestTimeout},
 	}
 }
 
-// Enabled indica se o notifier vai efetivamente disparar requisições.
-func (n *Notifier) Enabled() bool {
-	return n != nil && n.url != ""
+func (n *Notifier) enabled() bool {
+	return n != nil && n.baseURL != ""
 }
 
-// NotifyCadastro envia um POST para a URL configurada com o evento de cadastro
-// concluído. Falhas são apenas logadas: o cadastro do usuário não deve ser
-// revertido por uma notificação que não chegou.
+// NotifyCadastro envia um POST com o evento de cadastro concluído. Falhas
+// são apenas logadas.
 func (n *Notifier) NotifyCadastro(ctx context.Context, event CadastroEvent) {
-	if !n.Enabled() {
+	if !n.enabled() {
 		return
 	}
-
 	if event.OcorridoEm == "" {
 		event.OcorridoEm = time.Now().UTC().Format(time.RFC3339)
 	}
+	n.notify(ctx, "cadastro", event)
+}
 
-	body, err := json.Marshal(event)
+// NotifyArquivo envia um POST com o evento de download de anexo
+// (sucesso ou falha). Falhas no envio do webhook são apenas logadas.
+func (n *Notifier) NotifyArquivo(ctx context.Context, event ArquivoEvent) {
+	if !n.enabled() {
+		return
+	}
+	if event.OcorridoEm == "" {
+		event.OcorridoEm = time.Now().UTC().Format(time.RFC3339)
+	}
+	n.notify(ctx, "arquivo", event)
+}
+
+// notify executa o POST para `baseURL/path`. Internamente comum a todos os
+// eventos.
+func (n *Notifier) notify(ctx context.Context, path string, payload any) {
+	url := n.baseURL + "/" + path
+
+	body, err := json.Marshal(payload)
 	if err != nil {
-		log.Printf("webhook cadastro: marshal: %v", err)
+		log.Printf("webhook %s: marshal: %v", path, err)
 		return
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, n.url, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
-		log.Printf("webhook cadastro: new request: %v", err)
+		log.Printf("webhook %s: new request: %v", path, err)
 		return
 	}
 	req.Header.Set("Content-Type", "application/json")
 	if n.secret != "" {
-		req.Header.Set(SecretHeader, n.secret)
+		req.Header.Set(secretHeader, n.secret)
 	}
 
 	res, err := n.http.Do(req)
 	if err != nil {
-		log.Printf("webhook cadastro: http do: %v", err)
+		log.Printf("webhook %s: http do: %v", path, err)
 		return
 	}
 	defer res.Body.Close()
 
 	if res.StatusCode >= 400 {
-		// Lê um trecho do corpo para facilitar diagnóstico, mas limita o
-		// tamanho para não logar páginas inteiras.
 		snippet, _ := io.ReadAll(io.LimitReader(res.Body, 512))
-		log.Printf("webhook cadastro: status %d: %s", res.StatusCode, bytes.TrimSpace(snippet))
+		log.Printf("webhook %s: status %d: %s", path, res.StatusCode, bytes.TrimSpace(snippet))
 		return
 	}
 
 	if _, err := io.Copy(io.Discard, res.Body); err != nil {
-		log.Printf("webhook cadastro: drain body: %v", err)
+		log.Printf("webhook %s: drain body: %v", path, err)
 	}
 }

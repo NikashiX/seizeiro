@@ -6,21 +6,24 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"time"
 
 	chatbotauth "github.com/automatiza-mg/seizeiro/internal/auth/chatbot"
 	"github.com/automatiza-mg/seizeiro/internal/sei/seiws"
 	"github.com/automatiza-mg/seizeiro/internal/sei/wssei"
 	"github.com/automatiza-mg/seizeiro/internal/soap"
+	"github.com/automatiza-mg/seizeiro/internal/tasks"
 	"github.com/danielgtaylor/huma/v2"
 )
 
 
-func resolveWSSEIClient(
+// resolveTokenData valida o header Bearer e devolve os dados do token do
+// chatbot (plataforma + plataforma_id). Retorna 401 em casos de token
+// ausente, inválido ou expirado.
+func resolveTokenData(
 	ctx context.Context,
 	app *application,
 	authorization string,
-) (*wssei.Client, error) {
+) (*chatbotauth.TokenData, error) {
 	token, ok := strings.CutPrefix(authorization, "Bearer ")
 	token = strings.TrimSpace(token)
 	if !ok || token == "" {
@@ -33,6 +36,20 @@ func resolveWSSEIClient(
 			return nil, huma.Error401Unauthorized("token inválido ou expirado")
 		}
 		return nil, fmt.Errorf("get token data: %w", err)
+	}
+	return tokenData, nil
+}
+
+// resolveWSSEIClient devolve o cliente WSSEI para o usuário identificado
+// pelo Bearer token informado, garantindo que o cadastro existe.
+func resolveWSSEIClient(
+	ctx context.Context,
+	app *application,
+	authorization string,
+) (*wssei.Client, error) {
+	tokenData, err := resolveTokenData(ctx, app, authorization)
+	if err != nil {
+		return nil, err
 	}
 
 	usuario, err := app.chatbotauth.GetUsuario(ctx, tokenData.Plataforma, tokenData.PlataformaID)
@@ -229,46 +246,52 @@ type GetDocumentoAnexoRequest struct {
 	Protocolo     int    `path:"protocolo" minimum:"1" doc:"ID interno do documento externo (idProtocolo). Não usar o protocolo formatado (ex.: 0107523)."`
 }
 
-// GetDocumentoAnexoResponse devolve a URL pública para baixar o anexo,
-// deduplicado por SHA-256.
+// GetDocumentoAnexoResponse confirma o enfileiramento do job de download.
+// A URL real chega via webhook quando o download termina (sucesso) ou um
+// erro descritivo é enviado se todas as tentativas falharem.
 type GetDocumentoAnexoResponse struct {
 	Body struct {
-		URL         string `json:"url"`
-		ExpiraEm    string `json:"expira_em,omitempty"`
-		ContentType string `json:"content_type"`
-		Bytes       int64  `json:"bytes"`
-		Hash        string `json:"hash"`
+		Status   string `json:"status" doc:"'enfileirado' quando o job foi aceito"`
+		Mensagem string `json:"mensagem" doc:"mensagem amigável para o usuário"`
 	}
 }
 
 func registerGetDocumentoAnexo(api huma.API, pathPrefix string, app *application) {
 	huma.Register(api, huma.Operation{
-		OperationID: "get-documento-anexo",
-		Method:      http.MethodGet,
-		Path:        pathPrefix + "/documentos/anexos/{protocolo}",
-		Tags:        []string{"Documentos"},
-		Summary:     "Baixa o anexo do SEI e devolve uma URL pública para download",
-		Description: "Baixa o anexo via WSSEI, calcula SHA-256, persiste em storage (deduplicado) e devolve uma URL pública para download direto. " +
-			"Quando o storage é Azure, a URL é uma SAS com expiração; quando filesystem, é uma rota interna sem expiração.",
+		OperationID:   "get-documento-anexo",
+		Method:        http.MethodGet,
+		Path:          pathPrefix + "/documentos/anexos/{protocolo}",
+		Tags:          []string{"Documentos"},
+		Summary:       "Enfileira o download de um anexo do SEI",
+		DefaultStatus: http.StatusAccepted,
+		Description: "Enfileira um job assíncrono que baixa o anexo via WSSEI, calcula o SHA-256, persiste no storage e dispara um webhook ao terminar. " +
+			"A rota retorna 202 imediatamente; a URL real do arquivo é enviada via webhook quando o download estiver pronto.",
 	}, func(ctx context.Context, in *GetDocumentoAnexoRequest) (*GetDocumentoAnexoResponse, error) {
-		client, err := resolveWSSEIClient(ctx, app, in.Authorization)
+		tokenData, err := resolveTokenData(ctx, app, in.Authorization)
 		if err != nil {
 			return nil, err
 		}
 
-		res, err := app.arquivos.BaixarAnexo(ctx, client, in.Protocolo)
+		// Garante usuário cadastrado antes de enfileirar.
+		if _, err := app.chatbotauth.GetUsuario(ctx, tokenData.Plataforma, tokenData.PlataformaID); err != nil {
+			if errors.Is(err, chatbotauth.ErrNotFound) {
+				return nil, huma.Error404NotFound("usuário do chatbot não cadastrado")
+			}
+			return nil, fmt.Errorf("get usuario: %w", err)
+		}
+
+		_, err = app.river.Insert(ctx, tasks.BaixarAnexoArgs{
+			Plataforma:   tokenData.Plataforma,
+			PlataformaID: tokenData.PlataformaID,
+			IDProtocolo:  in.Protocolo,
+		}, nil)
 		if err != nil {
-			return nil, fmt.Errorf("baixar anexo: %w", err)
+			return nil, fmt.Errorf("enfileirar download: %w", err)
 		}
 
 		var resp GetDocumentoAnexoResponse
-		resp.Body.URL = res.URL
-		resp.Body.ContentType = res.ContentType
-		resp.Body.Bytes = res.Bytes
-		resp.Body.Hash = res.Hash
-		if !res.ExpiraEm.IsZero() {
-			resp.Body.ExpiraEm = res.ExpiraEm.UTC().Format(time.RFC3339)
-		}
+		resp.Body.Status = "enfileirado"
+		resp.Body.Mensagem = "O download foi enfileirado. O link do arquivo será enviado via webhook quando o download terminar."
 		return &resp, nil
 	})
 }

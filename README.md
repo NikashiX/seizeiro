@@ -1,4 +1,4 @@
-# Seizeiro
+# MCP SEI
 
 Sistema de análise e triagem automática de processos SEI usando IA.
 

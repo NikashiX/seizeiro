@@ -117,6 +117,10 @@ func NewTestInstance() (*TestInstance, error) {
 		return nil, fmt.Errorf("apply migrations: %w", err)
 	}
 
+	if err := migrations.RiverUp(ctx, db); err != nil {
+		return nil, fmt.Errorf("apply river migrations: %w", err)
+	}
+
 	return &TestInstance{
 		pool:     pool,
 		resource: resource,

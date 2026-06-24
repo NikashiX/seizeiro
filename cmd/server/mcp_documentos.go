@@ -5,12 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	chatbotauth "github.com/automatiza-mg/seizeiro/internal/auth/chatbot"
 	"github.com/automatiza-mg/seizeiro/internal/sei/seiws"
 	"github.com/automatiza-mg/seizeiro/internal/sei/wssei"
 	"github.com/automatiza-mg/seizeiro/internal/soap"
+	"github.com/automatiza-mg/seizeiro/internal/tasks"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -20,8 +20,9 @@ import (
 func registerDocumentosTools(server *mcp.Server, app *application) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name: "documento_baixar_anexo",
-		Description: "Baixa um documento externo (anexo) do SEI e devolve uma URL pública para download direto pelo cliente. " +
-			"O conteúdo é deduplicado por SHA-256: chamadas posteriores com o mesmo conteúdo reaproveitam o mesmo armazenamento e devolvem a mesma URL. " +
+		Description: "Enfileira o download de um documento externo (anexo) do SEI. " +
+			"A tool retorna IMEDIATAMENTE com {status:'enfileirado'} (não devolve a URL na mesma resposta). " +
+			"Quando o download terminar, o usuário receberá uma notificação assíncrona via webhook (no WhatsApp/Telegram) com a URL para baixar o arquivo. " +
 			"REQUER o id interno do documento (campo `id_protocolo`). " +
 			"NÃO use o protocolo formatado exibido ao usuário (ex.: 0107523). " +
 			"Para obter o id interno a partir do protocolo formatado, chame antes `documento_consultar_soap` e use o campo `id_documento` da resposta.",
@@ -87,14 +88,11 @@ type BaixarAnexoInput struct {
 	IDProtocolo int `json:"id_protocolo" jsonschema:"id interno do documento externo (anexo). Equivalente ao campo id_documento devolvido por documento_consultar_soap. NÃO usar o protocolo formatado exibido ao usuário (ex.: 0107523)."`
 }
 
-// BaixarAnexoOutput devolve a URL pública do anexo, o content-type, o tamanho
-// e o hash SHA-256 do conteúdo (útil como identificador estável).
+// BaixarAnexoOutput é a resposta da tool — apenas indica que o job foi
+// enfileirado. A URL real chega via webhook quando o download termina.
 type BaixarAnexoOutput struct {
-	URL         string `json:"url" jsonschema:"URL pública para baixar o anexo (Azure SAS quando o storage é Azure; rota interna quando filesystem)"`
-	ExpiraEm    string `json:"expira_em,omitempty" jsonschema:"instante de expiração da URL em RFC 3339 (omitido quando a URL não expira)"`
-	ContentType string `json:"content_type" jsonschema:"content-type retornado pelo SEI"`
-	Bytes       int64  `json:"bytes" jsonschema:"tamanho do anexo em bytes"`
-	Hash        string `json:"hash" jsonschema:"SHA-256 hex do conteúdo (identifica o arquivo de forma estável)"`
+	Status   string `json:"status" jsonschema:"sempre 'enfileirado' quando o download foi aceito"`
+	Mensagem string `json:"mensagem" jsonschema:"mensagem amigável para o usuário"`
 }
 
 func (app *application) toolBaixarAnexo(
@@ -102,29 +100,34 @@ func (app *application) toolBaixarAnexo(
 	_ *mcp.CallToolRequest,
 	in BaixarAnexoInput,
 ) (*mcp.CallToolResult, BaixarAnexoOutput, error) {
-	client, err := resolveWSSEIClientByPlataforma(ctx, app, in.Plataforma, in.PlataformaID)
-	if err != nil {
+	// Garante usuário cadastrado antes de enfileirar (evita job descartado).
+	if _, err := app.chatbotauth.GetUsuario(ctx, in.Plataforma, in.PlataformaID); err != nil {
 		if errors.Is(err, chatbotauth.ErrNotFound) {
 			return toolNotFoundResult(), BaixarAnexoOutput{}, nil
 		}
-		return nil, BaixarAnexoOutput{}, err
+		return nil, BaixarAnexoOutput{}, fmt.Errorf("get usuario: %w", err)
 	}
 
-	res, err := app.arquivos.BaixarAnexo(ctx, client, in.IDProtocolo)
+	if in.IDProtocolo <= 0 {
+		return &mcp.CallToolResult{
+			IsError: true,
+			Content: []mcp.Content{&mcp.TextContent{Text: "id_protocolo inválido"}},
+		}, BaixarAnexoOutput{}, nil
+	}
+
+	_, err := app.river.Insert(ctx, tasks.BaixarAnexoArgs{
+		Plataforma:   in.Plataforma,
+		PlataformaID: in.PlataformaID,
+		IDProtocolo:  in.IDProtocolo,
+	}, nil)
 	if err != nil {
-		return nil, BaixarAnexoOutput{}, fmt.Errorf("baixar anexo: %w", err)
+		return nil, BaixarAnexoOutput{}, fmt.Errorf("enfileirar download: %w", err)
 	}
 
-	out := BaixarAnexoOutput{
-		URL:         res.URL,
-		ContentType: res.ContentType,
-		Bytes:       res.Bytes,
-		Hash:        res.Hash,
-	}
-	if !res.ExpiraEm.IsZero() {
-		out.ExpiraEm = res.ExpiraEm.UTC().Format(time.RFC3339)
-	}
-	return nil, out, nil
+	return nil, BaixarAnexoOutput{
+		Status:   "enfileirado",
+		Mensagem: "O download foi enfileirado. Você receberá uma mensagem quando o arquivo estiver pronto.",
+	}, nil
 }
 
 // ListarDocumentosProcessoInput agrupa as entradas da tool

@@ -13,7 +13,7 @@ func (app *application) routes() http.Handler {
 	api := humago.New(mux, huma.DefaultConfig("SEIzeiro", "0.1.0"))
 	registerCreateChatbotCadastro(api, "/api/v1", app.cfg.BaseURL, app.chatbotauth)
 	registerDocumentos(api, "/api/v1", app)
-	registerArquivos(api, "/api/v1", app)
+	registerArquivos(api, "", app)
 
 	mux.HandleFunc("GET /cadastro", app.handleCadastro)
 	mux.HandleFunc("POST /cadastro", app.handleCadastroPost)
