@@ -1,6 +1,7 @@
 package wssei
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 )
 
 // ConsultarDocumentoInterno retorna os metadados do Documento Interno.
@@ -316,4 +318,276 @@ func (c *Client) ListarDocumentosProcessos(ctx context.Context, params ListarDoc
 type Documento struct {
 	ID        string             `json:"id"`
 	Atributos AtributosDocumento `json:"atributos"`
+}
+
+// AssinarDocParams tipo utilizado na funcao AssinarDocumentos
+type AssinarDocParams struct {
+	// Todos os parametros sao obrigatorios
+	documento int
+	orgao     int
+	cargo     string
+	login     string
+	senha     string
+	usuario   int
+}
+
+// AssinarDocumento realiza a assinatura de um documento
+func (c *Client) AssinarDocumento(ctx context.Context, params AssinarDocParams) error {
+	if params.documento <= 0 {
+		return fmt.Errorf("documento invalido: %d", params.documento)
+	}
+	if params.orgao <= 0 {
+		return fmt.Errorf("orgao invalido: %d", params.orgao)
+	}
+	if strings.TrimSpace(params.cargo) == "" {
+		return fmt.Errorf("texto required")
+	}
+	if strings.TrimSpace(params.login) == "" {
+		return fmt.Errorf("texto required")
+	}
+	if strings.TrimSpace(params.senha) == "" {
+		return fmt.Errorf("texto required")
+	}
+	if params.usuario <= 0 {
+		return fmt.Errorf("usuario invalido: %d", params.usuario)
+	}
+
+	payload := map[string]interface{}{
+		"documento": params.documento,
+		"orgao":     params.orgao,
+		"cargo":     params.cargo,
+		"login":     params.login,
+		"senha":     params.senha,
+		"usuario":   params.usuario,
+	}
+	bodyBytes, err := json.Marshal(payload)
+	if err != nil {
+		fmt.Errorf("erro ao gerar payload: %w", err)
+	}
+
+	url := fmt.Sprintf("%s/documento/assinar", c.endpoint)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(bodyBytes))
+	if err != nil {
+		fmt.Errorf("erro request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	res, err := c.http.Do(req)
+	if err != nil {
+		fmt.Errorf("erro response: %w", err)
+	}
+	defer res.Body.Close()
+
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return fmt.Errorf("read body: %w", err)
+	}
+
+	if res.StatusCode != http.StatusOK {
+		return fmt.Errorf("unexpected status %d: %s", res.StatusCode, strings.TrimSpace(string(body)))
+	}
+
+	var env Envelope[struct{}]
+	if err := json.Unmarshal(body, &env); err != nil {
+		return fmt.Errorf("json unmarshal: %w", err)
+	}
+
+	if !env.Sucesso {
+		return fmt.Errorf("invalid response: %s", env.Mensagem)
+	}
+
+	return nil
+}
+
+// DocExterno tipo utilizado na funcao CadastrarDocumentoExterno
+type DocExternoParams struct {
+	// procedimento obrigatorio
+	procedimento               int
+	idUnidadeGeradoraProtocolo int
+	numero                     string
+	// idSerie obrigatorio
+	idSerie int
+	// dataElaboracao  obrigatotio
+	dataElaboracao    string
+	idTipoConferencia int
+	assuntos          string
+	interessados      string
+	remetente         int
+	observacao        string
+	// nivelAcesso obrigatorio
+	nivelAcesso     int
+	idHipoteseLegal int
+	// anexo obrigatorio
+	anexo string
+	// grauSigilo obrigatotio
+	grauSigilo string
+}
+
+// CadastrarDocumentoExterno cadastra um novo documento externo
+func (c *Client) CadastrarDocumentoExterno(ctx context.Context, params DocExternoParams) error {
+	if params.procedimento <= 0 {
+		return fmt.Errorf("procedimento invalido: %d", params.procedimento)
+	}
+	if params.idSerie <= 0 {
+		return fmt.Errorf("id do documento invalido: %d", params.idSerie)
+	}
+	if strings.TrimSpace(params.dataElaboracao) == "" {
+		return fmt.Errorf("texto required")
+	}
+	if params.nivelAcesso <= 0 {
+		return fmt.Errorf("nivel de acesso invalido: %d", params.nivelAcesso)
+	}
+	if strings.TrimSpace(params.anexo) == "" {
+		return fmt.Errorf("texto required")
+	}
+	if strings.TrimSpace(params.grauSigilo) == "" {
+		return fmt.Errorf("texto required")
+	}
+
+	payload := map[string]interface{}{
+		"procedimento":               params.procedimento,
+		"idUnidadeGeradoraProtocolo": params.idUnidadeGeradoraProtocolo,
+		"numero":                     params.numero,
+		"idSerie":                    params.idSerie,
+		"dataElaboracao":             params.dataElaboracao,
+		"idTipoConferencia":          params.idTipoConferencia,
+		"assuntos":                   params.assuntos,
+		"interessados":               params.interessados,
+		"remetente":                  params.remetente,
+		"observacao":                 params.observacao,
+		"nivelAcesso":                params.nivelAcesso,
+		"idHipoteseLegal":            params.idHipoteseLegal,
+		"anexo":                      params.anexo,
+		"grauSigilo":                 params.grauSigilo,
+	}
+
+	bodyBytes, err := json.Marshal(payload)
+	if err != nil {
+		fmt.Errorf("erro ao gerar payload: %w", err)
+	}
+
+	url := fmt.Sprintf("%s/documento/%d/externo/criar", c.endpoint, params.procedimento)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(bodyBytes))
+	if err != nil {
+		fmt.Errorf("erro request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	res, err := c.http.Do(req)
+	if err != nil {
+		fmt.Errorf("erro response: %w", err)
+	}
+	defer res.Body.Close()
+
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return fmt.Errorf("read body: %w", err)
+	}
+
+	if res.StatusCode != http.StatusOK {
+		return fmt.Errorf("unexpected status %d: %s", res.StatusCode, strings.TrimSpace(string(body)))
+	}
+
+	var env Envelope[struct{}]
+	if err := json.Unmarshal(body, &env); err != nil {
+		return fmt.Errorf("json unmarshal: %w", err)
+	}
+
+	if !env.Sucesso {
+		return fmt.Errorf("invalid response: %s", env.Mensagem)
+	}
+
+	return nil
+}
+
+// DocExterno tipo utilizado na funcao CadastrarDocumentoInterno
+type DocInternoParams struct {
+	// procedimento obrigatorio
+	procedimento               int
+	idUnidadeGeradoraProtocolo int
+	// idSerie obrigatorio
+	idSerie      int
+	assuntos     string
+	interessados string
+	// observacao obrigatorio
+	observacao string
+	// nivelAcesso obrigatorio
+	nivelAcesso              int
+	idHipoteseLegal          int
+	idTextoPadraoInterno     int
+	protocoloDocumentoModelo string
+	descricao                string
+	destinatarios            string
+}
+
+// CadastrarDocumentoInterno cadastra um novo documento interno
+func (c *Client) CadastrarDocumentoInterno(ctx context.Context, params DocInternoParams) error {
+	if params.procedimento <= 0 {
+		return fmt.Errorf("procedimento invalido: %d", params.procedimento)
+	}
+	if params.idSerie <= 0 {
+		return fmt.Errorf("id do documento invalido: %d", params.idSerie)
+	}
+	if strings.TrimSpace(params.observacao) == "" {
+		return fmt.Errorf("texto required")
+	}
+	if params.nivelAcesso <= 0 {
+		return fmt.Errorf("nivel de acesso invalido: %d", params.nivelAcesso)
+	}
+
+	payload := map[string]interface{}{
+		"procedimento":               params.procedimento,
+		"idUnidadeGeradoraProtocolo": params.idUnidadeGeradoraProtocolo,
+		"idSerie":                    params.idSerie,
+		"assuntos":                   params.assuntos,
+		"interessados":               params.interessados,
+		"observacao":                 params.observacao,
+		"nivelAcesso":                params.nivelAcesso,
+		"idHipoteseLegal":            params.idHipoteseLegal,
+		"idTextoPadraoInterno":       params.idTextoPadraoInterno,
+		"protocoloDocumentoModelo":   params.protocoloDocumentoModelo,
+		"descricao":                  params.descricao,
+		"destinatarios":              params.destinatarios,
+	}
+
+	bodyBytes, err := json.Marshal(payload)
+	if err != nil {
+		fmt.Errorf("erro ao gerar payload: %w", err)
+	}
+
+	url := fmt.Sprintf("%s/documento/%d/externo/criar", c.endpoint, params.procedimento)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(bodyBytes))
+	if err != nil {
+		fmt.Errorf("erro request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	res, err := c.http.Do(req)
+	if err != nil {
+		fmt.Errorf("erro response: %w", err)
+	}
+	defer res.Body.Close()
+
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return fmt.Errorf("read body: %w", err)
+	}
+
+	if res.StatusCode != http.StatusOK {
+		return fmt.Errorf("unexpected status %d: %s", res.StatusCode, strings.TrimSpace(string(body)))
+	}
+
+	var env Envelope[struct{}]
+	if err := json.Unmarshal(body, &env); err != nil {
+		return fmt.Errorf("json unmarshal: %w", err)
+	}
+
+	if !env.Sucesso {
+		return fmt.Errorf("invalid response: %s", env.Mensagem)
+	}
+
+	return nil
 }
