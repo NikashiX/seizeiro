@@ -17,7 +17,7 @@ type GetArquivoRequest struct {
 	Hash string `path:"hash" doc:"SHA-256 hex do arquivo (64 caracteres hex)"`
 }
 
-// registerArquivos registra a rota pública que serve arquivos armazenados. 
+// registerArquivos registra a rota pública que serve arquivos armazenados.
 //
 // Quando o storage tem URL assinada (Azure), idealmente o cliente nem chega
 // aqui — recebe a SAS direto. Esta rota cobre o caso filesystem (sem URL
