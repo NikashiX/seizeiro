@@ -2,11 +2,10 @@ package main
 
 import (
 	"context"
-	"encoding/base64"
 	"errors"
 	"fmt"
-	"io"
 	"strings"
+	"time"
 
 	chatbotauth "github.com/automatiza-mg/seizeiro/internal/auth/chatbot"
 	"github.com/automatiza-mg/seizeiro/internal/sei/seiws"
@@ -21,7 +20,8 @@ import (
 func registerDocumentosTools(server *mcp.Server, app *application) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name: "documento_baixar_anexo",
-		Description: "Baixa o conteúdo binário de um documento externo (anexo) do SEI e devolve o arquivo codificado em base64. " +
+		Description: "Baixa um documento externo (anexo) do SEI e devolve uma URL pública para download direto pelo cliente. " +
+			"O conteúdo é deduplicado por SHA-256: chamadas posteriores com o mesmo conteúdo reaproveitam o mesmo armazenamento e devolvem a mesma URL. " +
 			"REQUER o id interno do documento (campo `id_protocolo`). " +
 			"NÃO use o protocolo formatado exibido ao usuário (ex.: 0107523). " +
 			"Para obter o id interno a partir do protocolo formatado, chame antes `documento_consultar_soap` e use o campo `id_documento` da resposta.",
@@ -87,12 +87,14 @@ type BaixarAnexoInput struct {
 	IDProtocolo int `json:"id_protocolo" jsonschema:"id interno do documento externo (anexo). Equivalente ao campo id_documento devolvido por documento_consultar_soap. NÃO usar o protocolo formatado exibido ao usuário (ex.: 0107523)."`
 }
 
-// BaixarAnexoOutput devolve o conteúdo do anexo codificado em base64,
-// acompanhado do content-type e do tamanho original em bytes.
+// BaixarAnexoOutput devolve a URL pública do anexo, o content-type, o tamanho
+// e o hash SHA-256 do conteúdo (útil como identificador estável).
 type BaixarAnexoOutput struct {
+	URL         string `json:"url" jsonschema:"URL pública para baixar o anexo (Azure SAS quando o storage é Azure; rota interna quando filesystem)"`
+	ExpiraEm    string `json:"expira_em,omitempty" jsonschema:"instante de expiração da URL em RFC 3339 (omitido quando a URL não expira)"`
 	ContentType string `json:"content_type" jsonschema:"content-type retornado pelo SEI"`
-	Bytes       int    `json:"bytes" jsonschema:"tamanho do anexo em bytes"`
-	DataBase64  string `json:"data_base64" jsonschema:"conteúdo do anexo codificado em base64"`
+	Bytes       int64  `json:"bytes" jsonschema:"tamanho do anexo em bytes"`
+	Hash        string `json:"hash" jsonschema:"SHA-256 hex do conteúdo (identifica o arquivo de forma estável)"`
 }
 
 func (app *application) toolBaixarAnexo(
@@ -108,22 +110,21 @@ func (app *application) toolBaixarAnexo(
 		return nil, BaixarAnexoOutput{}, err
 	}
 
-	body, contentType, err := client.BaixarAnexo(ctx, in.IDProtocolo)
+	res, err := app.arquivos.BaixarAnexo(ctx, client, in.IDProtocolo)
 	if err != nil {
 		return nil, BaixarAnexoOutput{}, fmt.Errorf("baixar anexo: %w", err)
 	}
-	defer body.Close()
 
-	data, err := io.ReadAll(body)
-	if err != nil {
-		return nil, BaixarAnexoOutput{}, fmt.Errorf("ler anexo: %w", err)
+	out := BaixarAnexoOutput{
+		URL:         res.URL,
+		ContentType: res.ContentType,
+		Bytes:       res.Bytes,
+		Hash:        res.Hash,
 	}
-
-	return nil, BaixarAnexoOutput{
-		ContentType: contentType,
-		Bytes:       len(data),
-		DataBase64:  base64.StdEncoding.EncodeToString(data),
-	}, nil
+	if !res.ExpiraEm.IsZero() {
+		out.ExpiraEm = res.ExpiraEm.UTC().Format(time.RFC3339)
+	}
+	return nil, out, nil
 }
 
 // ListarDocumentosProcessoInput agrupa as entradas da tool

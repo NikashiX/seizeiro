@@ -3,37 +3,22 @@ module github.com/automatiza-mg/seizeiro
 go 1.26.3
 
 require (
-	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.13.1
+	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.21.1
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.7.0
-	github.com/JohannesKaufmann/html-to-markdown/v2 v2.5.2
 	github.com/PuerkitoBio/goquery v1.8.1
 	github.com/caarlos0/env/v11 v11.4.1
 	github.com/danielgtaylor/huma/v2 v2.38.0
 	github.com/google/go-cmp v0.7.0
-	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.9.2
 	github.com/joho/godotenv v1.5.1
-	github.com/openai/openai-go/v3 v3.39.0
+	github.com/modelcontextprotocol/go-sdk v1.6.1
 	github.com/ory/dockertest/v4 v4.0.0
-	github.com/pgvector/pgvector-go v0.4.0
-	github.com/pkoukk/tiktoken-go v0.1.6
-	github.com/pkoukk/tiktoken-go-loader v0.0.2
 	github.com/pressly/goose/v3 v3.27.1
-	github.com/riverqueue/river v0.39.0
-	github.com/riverqueue/river/riverdriver/riverdatabasesql v0.39.0
-	github.com/riverqueue/river/riverdriver/riverpgxv5 v0.39.0
-	github.com/riverqueue/river/rivertype v0.39.0
-	github.com/tmc/langchaingo v0.1.14
-	github.com/wneessen/go-mail v0.7.3
-	golang.org/x/crypto v0.51.0
-	golang.org/x/net v0.55.0
-	golang.org/x/sync v0.20.0
 )
 
 require (
 	cel.dev/expr v0.25.1 // indirect
 	filippo.io/edwards25519 v1.2.0 // indirect
-	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.21.1 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/internal v1.12.0 // indirect
 	github.com/AzureAD/microsoft-authentication-library-for-go v1.7.2 // indirect
 	github.com/ClickHouse/ch-go v0.71.0 // indirect
@@ -87,7 +72,6 @@ require (
 	github.com/moby/docker-image-spec v1.3.1 // indirect
 	github.com/moby/moby/api v1.54.2 // indirect
 	github.com/moby/moby/client v0.4.1 // indirect
-	github.com/modelcontextprotocol/go-sdk v1.6.1 // indirect
 	github.com/ncruces/go-sqlite3 v0.32.0 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/ncruces/julianday v1.0.0 // indirect
@@ -145,7 +129,9 @@ require (
 	go.uber.org/zap v1.27.1 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/exp v0.0.0-20260410095643-746e56fc9e2f // indirect
+	golang.org/x/net v0.55.0 // indirect
 	golang.org/x/oauth2 v0.35.0 // indirect
+	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/sys v0.45.0 // indirect
 	golang.org/x/text v0.37.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260120221211-b8f7ae30c516 // indirect

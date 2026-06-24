@@ -11,7 +11,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/automatiza-mg/seizeiro/internal/arquivo"
 	chatbotauth "github.com/automatiza-mg/seizeiro/internal/auth/chatbot"
+	"github.com/automatiza-mg/seizeiro/internal/blob"
 	"github.com/automatiza-mg/seizeiro/internal/config"
 	"github.com/automatiza-mg/seizeiro/internal/database"
 	"github.com/automatiza-mg/seizeiro/internal/postgres/migrations"
@@ -21,8 +23,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/joho/godotenv"
-	"github.com/riverqueue/river"
-	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 )
 
 func main() {
@@ -47,6 +47,14 @@ type application struct {
 	// não estão configuradas, ele fica nil e as rotas correspondentes devolvem
 	// um erro 503.
 	seiws *seiws.Client
+	// arquivos baixa anexos do SEI, deduplica por SHA-256 e devolve URL.
+	arquivos *arquivo.Service
+}
+
+// ArquivoURL implementa [arquivo.LinkBuilder] gerando a URL pública da rota
+// interna que serve arquivos quando o storage é filesystem.
+func (app *application) ArquivoURL(hash string) string {
+	return fmt.Sprintf("%s/api/v1/arquivos/%s", app.cfg.BaseURL, hash)
 }
 
 func run() error {
@@ -73,25 +81,6 @@ func run() error {
 		}
 	}
 
-	if err := riverUp(ctx, pool); err != nil {
-		return fmt.Errorf("river up: %w", err)
-	}
-
-	workers := river.NewWorkers()
-	riverClient, err := river.NewClient(riverpgxv5.New(pool), &river.Config{
-		Queues: map[string]river.QueueConfig{
-			river.QueueDefault: {MaxWorkers: 10},
-		},
-		Workers: workers,
-	})
-	if err != nil {
-		return fmt.Errorf("river client: %w", err)
-	}
-
-	if err := riverClient.Start(ctx); err != nil {
-		return fmt.Errorf("river start: %w", err)
-	}
-
 	encKey, err := cfg.Key()
 	if err != nil {
 		return fmt.Errorf("config key: %w", err)
@@ -100,6 +89,11 @@ func run() error {
 	chatAuth, err := chatbotauth.NewService(pool, encKey)
 	if err != nil {
 		return fmt.Errorf("chatbot auth: %w", err)
+	}
+
+	storage, err := newStorage(cfg.Storage)
+	if err != nil {
+		return fmt.Errorf("storage: %w", err)
 	}
 
 	app := &application{
@@ -112,6 +106,12 @@ func run() error {
 		wsseiClients:   newWSSEIClientCache(cfg.SEI.BaseURL),
 		seiws:          newSEIWSClient(cfg.SEI),
 	}
+	app.arquivos = arquivo.NewService(arquivo.Config{
+		Pool:    pool,
+		Storage: storage,
+		Links:   app,
+		URLTTL:  time.Hour,
+	})
 
 	srv := &http.Server{
 		Addr:    ":4000",
@@ -138,11 +138,17 @@ func run() error {
 		return fmt.Errorf("http shutdown: %w", err)
 	}
 
-	if err := riverClient.Stop(stopCtx); err != nil {
-		return fmt.Errorf("river stop: %w", err)
-	}
-
 	return nil
+}
+
+// newStorage cria o backend de armazenamento de acordo com a configuração:
+// Azure Blob quando STORAGE_AZURE_ACCOUNT está definido, ou filesystem local
+// caso contrário.
+func newStorage(cfg config.Storage) (blob.Storage, error) {
+	if cfg.AzureAccount != "" {
+		return blob.NewAzureStorage(cfg.AzureAccount, cfg.AzureKey, cfg.AzureContainer)
+	}
+	return blob.NewFilesystemStorage(cfg.FilesystemRoot)
 }
 
 // newSEIWSClient cria o cliente da API SOAP legada do SEI quando todas as
@@ -157,13 +163,6 @@ func newSEIWSClient(cfg config.SEI) *seiws.Client {
 		SiglaSistema:         cfg.SiglaSistema,
 		IdentificacaoServico: cfg.IdentificacaoServico,
 	})
-}
-
-// Aplica as migrações do River adaptando [pgxpool.Pool] para [sql.DB].
-func riverUp(ctx context.Context, pool *pgxpool.Pool) error {
-	db := stdlib.OpenDBFromPool(pool)
-	defer db.Close()
-	return migrations.RiverUp(ctx, db)
 }
 
 // Aplica as migrações do schema da aplicação adaptando [pgxpool.Pool] para

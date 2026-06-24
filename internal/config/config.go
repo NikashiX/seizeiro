@@ -7,6 +7,18 @@ import (
 	"github.com/caarlos0/env/v11"
 )
 
+// Storage contém as configurações de armazenamento de arquivos baixados do
+// SEI.
+//
+// Quando AzureAccount está definido, usa o Azure Blob Storage; caso
+// contrário, usa o sistema de arquivos no diretório FilesystemRoot.
+type Storage struct {
+	AzureAccount   string `env:"STORAGE_AZURE_ACCOUNT"`
+	AzureKey       string `env:"STORAGE_AZURE_KEY"`
+	AzureContainer string `env:"STORAGE_AZURE_CONTAINER"`
+	FilesystemRoot string `env:"STORAGE_FILESYSTEM_ROOT" envDefault:".blob"`
+}
+
 // SEI contém as configurações de acesso às APIs do SEI.
 type SEI struct {
 	BaseURL string `env:"SEI_BASE_URL,notEmpty"`
@@ -46,6 +58,7 @@ type Config struct {
 
 	Production bool `env:"PRODUCTION" envDefault:"true"`
 
+	Storage        Storage
 	SEI            SEI
 	ChatbotWebhook ChatbotWebhook
 }

@@ -8,6 +8,20 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type Arquivo struct {
+	Hash         string
+	StorageKey   string
+	ContentType  string
+	TamanhoBytes int64
+	CriadoEm     pgtype.Timestamptz
+}
+
+type DocumentoAnexo struct {
+	IDProtocolo int64
+	Hash        string
+	BaixadoEm   pgtype.Timestamptz
+}
+
 type TokenChatbot struct {
 	Hash         []byte
 	Plataforma   string

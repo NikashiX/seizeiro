@@ -9,8 +9,6 @@ import (
 	"fmt"
 
 	"github.com/pressly/goose/v3"
-	"github.com/riverqueue/river/riverdriver/riverdatabasesql"
-	"github.com/riverqueue/river/rivermigrate"
 )
 
 //go:embed *.sql
@@ -27,22 +25,6 @@ func Up(ctx context.Context, db *sql.DB) error {
 	_, err = m.Up(ctx)
 	if err != nil {
 		return fmt.Errorf("up: %w", err)
-	}
-
-	return nil
-}
-
-// RiverUp aplica as migrações do schema do River (river_job, etc) ao banco de
-// dados PostgreSQL.
-func RiverUp(ctx context.Context, db *sql.DB) error {
-	migrator, err := rivermigrate.New(riverdatabasesql.New(db), nil)
-	if err != nil {
-		return fmt.Errorf("new river migrator: %w", err)
-	}
-
-	_, err = migrator.Migrate(ctx, rivermigrate.DirectionUp, nil)
-	if err != nil {
-		return fmt.Errorf("river migrate up: %w", err)
 	}
 
 	return nil

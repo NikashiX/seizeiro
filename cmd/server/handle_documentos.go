@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	chatbotauth "github.com/automatiza-mg/seizeiro/internal/auth/chatbot"
 	"github.com/automatiza-mg/seizeiro/internal/sei/seiws"
@@ -229,33 +229,47 @@ type GetDocumentoAnexoRequest struct {
 	Protocolo     int    `path:"protocolo" minimum:"1" doc:"ID interno do documento externo (idProtocolo). Não usar o protocolo formatado (ex.: 0107523)."`
 }
 
+// GetDocumentoAnexoResponse devolve a URL pública para baixar o anexo,
+// deduplicado por SHA-256.
+type GetDocumentoAnexoResponse struct {
+	Body struct {
+		URL         string `json:"url"`
+		ExpiraEm    string `json:"expira_em,omitempty"`
+		ContentType string `json:"content_type"`
+		Bytes       int64  `json:"bytes"`
+		Hash        string `json:"hash"`
+	}
+}
+
 func registerGetDocumentoAnexo(api huma.API, pathPrefix string, app *application) {
 	huma.Register(api, huma.Operation{
 		OperationID: "get-documento-anexo",
 		Method:      http.MethodGet,
-		Path:        pathPrefix + "/documentos/anexos/{protocolo}/conteudo",
+		Path:        pathPrefix + "/documentos/anexos/{protocolo}",
 		Tags:        []string{"Documentos"},
-		Summary:     "Baixa o conteúdo binário de um documento externo (anexo)",
-	}, func(ctx context.Context, in *GetDocumentoAnexoRequest) (*huma.StreamResponse, error) {
+		Summary:     "Baixa o anexo do SEI e devolve uma URL pública para download",
+		Description: "Baixa o anexo via WSSEI, calcula SHA-256, persiste em storage (deduplicado) e devolve uma URL pública para download direto. " +
+			"Quando o storage é Azure, a URL é uma SAS com expiração; quando filesystem, é uma rota interna sem expiração.",
+	}, func(ctx context.Context, in *GetDocumentoAnexoRequest) (*GetDocumentoAnexoResponse, error) {
 		client, err := resolveWSSEIClient(ctx, app, in.Authorization)
 		if err != nil {
 			return nil, err
 		}
 
-		body, contentType, err := client.BaixarAnexo(ctx, in.Protocolo)
+		res, err := app.arquivos.BaixarAnexo(ctx, client, in.Protocolo)
 		if err != nil {
 			return nil, fmt.Errorf("baixar anexo: %w", err)
 		}
 
-		return &huma.StreamResponse{
-			Body: func(hctx huma.Context) {
-				if contentType != "" {
-					hctx.SetHeader("Content-Type", contentType)
-				}
-				defer body.Close()
-				_, _ = io.Copy(hctx.BodyWriter(), body)
-			},
-		}, nil
+		var resp GetDocumentoAnexoResponse
+		resp.Body.URL = res.URL
+		resp.Body.ContentType = res.ContentType
+		resp.Body.Bytes = res.Bytes
+		resp.Body.Hash = res.Hash
+		if !res.ExpiraEm.IsZero() {
+			resp.Body.ExpiraEm = res.ExpiraEm.UTC().Format(time.RFC3339)
+		}
+		return &resp, nil
 	})
 }
 
