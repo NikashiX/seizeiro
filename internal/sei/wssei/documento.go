@@ -153,9 +153,14 @@ func (c *Client) PesquisarTipoTemplateDocumento(ctx context.Context, id int, pro
 		return nil, fmt.Errorf("procedimento invalido: %d", procedimento)
 	}
 
+	q := new(url.Values)
+	q.Set("id", strconv.Itoa(id))
+	q.Set("procedimento", strconv.Itoa(procedimento))
+
 	url := fmt.Sprintf(
-		"%s/documento/tipo/template",
+		"%s/documento/tipo/template?%s",
 		c.endpoint,
+		q.Encode(),
 	)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -330,12 +335,12 @@ type Documento struct {
 // AssinarDocParams tipo utilizado na funcao AssinarDocumentos
 type AssinarDocParams struct {
 	// Todos os parametros sao obrigatorios
-	Documento int
-	Orgao     int
-	Cargo     string
-	Login     string
-	Senha     string
-	Usuario   int
+	Documento int    `json:"documento"`
+	Orgao     int    `json:"orgao"`
+	Cargo     string `json:"cargo"`
+	Login     string `json:"login"`
+	Senha     string `json:"senha"`
+	Usuario   int    `json:"usuario"`
 }
 
 // AssinarDocumento realiza a assinatura de um documento
@@ -359,15 +364,7 @@ func (c *Client) AssinarDocumento(ctx context.Context, params AssinarDocParams) 
 		return fmt.Errorf("usuario invalido: %d", params.Usuario)
 	}
 
-	payload := map[string]interface{}{
-		"documento": params.Documento,
-		"orgao":     params.Orgao,
-		"cargo":     params.Cargo,
-		"login":     params.Login,
-		"senha":     params.Senha,
-		"usuario":   params.Usuario,
-	}
-	bodyBytes, err := json.Marshal(payload)
+	bodyBytes, err := json.Marshal(params)
 	if err != nil {
 		return fmt.Errorf("erro ao gerar payload: %w", err)
 	}
@@ -378,7 +375,7 @@ func (c *Client) AssinarDocumento(ctx context.Context, params AssinarDocParams) 
 	if err != nil {
 		return fmt.Errorf("erro request: %w", err)
 	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Content-Type", "application/json")
 
 	res, err := c.http.Do(req)
 	if err != nil {
@@ -407,28 +404,30 @@ func (c *Client) AssinarDocumento(ctx context.Context, params AssinarDocParams) 
 	return nil
 }
 
-// DocExterno tipo utilizado na funcao CadastrarDocumentoExterno
 type DocExternoParams struct {
 	// procedimento obrigatorio
-	Procedimento               int
-	IdUnidadeGeradoraProtocolo int
-	Numero                     string
+	Procedimento               int    `json:"procedimento"`
+	IdUnidadeGeradoraProtocolo int    `json:"idUnidadeGeradoraProtocolo"`
+	Numero                     string `json:"numero"`
 	// IdSerie obrigatorio
-	IdSerie int
-	// DataElaboracao  obrigatotio
-	DataElaboracao    string
-	IdTipoConferencia int
-	Assuntos          string
-	Interessados      string
-	Remetente         int
-	Observacao        string
+	IdSerie int `json:"idSerie"`
+	// DataElaboracao obrigatorio
+	DataElaboracao    string `json:"dataElaboracao"`
+	IdTipoConferencia int    `json:"idTipoConferencia"`
+	Assuntos          string `json:"assuntos"`
+	Interessados      string `json:"interessados"`
+	Remetente         int    `json:"remetente"`
+	Observacao        string `json:"observacao"`
 	// NivelAcesso obrigatorio
-	NivelAcesso     int
-	IdHipoteseLegal int
+	NivelAcesso     int `json:"nivelAcesso"`
+	IdHipoteseLegal int `json:"idHipoteseLegal"`
 	// Anexo obrigatorio
-	Anexo string
-	// GrauSigilo obrigatotio
-	GrauSigilo string
+	Anexo string `json:"anexo"`
+	// GrauSigilo obrigatorio
+	GrauSigilo string `json:"grauSigilo"`
+}
+
+type CadastrarDocumentoExternoRequest struct {
 }
 
 // CadastrarDocumentoExterno cadastra um novo documento externo
@@ -452,24 +451,7 @@ func (c *Client) CadastrarDocumentoExterno(ctx context.Context, params DocExtern
 		return fmt.Errorf("graua sigilo: texto required")
 	}
 
-	payload := map[string]interface{}{
-		"procedimento":               params.Procedimento,
-		"idUnidadeGeradoraProtocolo": params.IdUnidadeGeradoraProtocolo,
-		"numero":                     params.Numero,
-		"idSerie":                    params.IdSerie,
-		"dataElaboracao":             params.DataElaboracao,
-		"idTipoConferencia":          params.IdTipoConferencia,
-		"assuntos":                   params.Assuntos,
-		"interessados":               params.Interessados,
-		"remetente":                  params.Remetente,
-		"observacao":                 params.Observacao,
-		"nivelAcesso":                params.NivelAcesso,
-		"idHipoteseLegal":            params.IdHipoteseLegal,
-		"anexo":                      params.Anexo,
-		"grauSigilo":                 params.GrauSigilo,
-	}
-
-	bodyBytes, err := json.Marshal(payload)
+	bodyBytes, err := json.Marshal(params)
 	if err != nil {
 		return fmt.Errorf("erro ao gerar payload: %w", err)
 	}
@@ -480,7 +462,7 @@ func (c *Client) CadastrarDocumentoExterno(ctx context.Context, params DocExtern
 	if err != nil {
 		return fmt.Errorf("erro request: %w", err)
 	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Content-Type", "application/json")
 
 	res, err := c.http.Do(req)
 	if err != nil {
@@ -509,24 +491,24 @@ func (c *Client) CadastrarDocumentoExterno(ctx context.Context, params DocExtern
 	return nil
 }
 
-// DocExterno tipo utilizado na funcao CadastrarDocumentoInterno
+// DocInterno tipo utilizado na funcao CadastrarDocumentoInterno
 type DocInternoParams struct {
 	// Procedimento obrigatorio
-	Procedimento               int
-	IdUnidadeGeradoraProtocolo int
-	// idSerie obrigatorio
-	IdSerie      int
-	Assuntos     string
-	Interessados string
+	Procedimento               int `json:"procedimento"`
+	IdUnidadeGeradoraProtocolo int `json:"idUnidadeGeradoraProtocolo"`
+	// IdSerie obrigatorio
+	IdSerie      int    `json:"idSerie"`
+	Assuntos     string `json:"assuntos"`
+	Interessados string `json:"interessados"`
 	// Observacao obrigatorio
-	Observacao string
+	Observacao string `json:"observacao"`
 	// NivelAcesso obrigatorio
-	NivelAcesso              int
-	IdHipoteseLegal          int
-	IdTextoPadraoInterno     int
-	ProtocoloDocumentoModelo string
-	Descricao                string
-	Destinatarios            string
+	NivelAcesso              int    `json:"nivelAcesso"`
+	IdHipoteseLegal          int    `json:"idHipoteseLegal"`
+	IdTextoPadraoInterno     int    `json:"idTextoPadraoInterno"`
+	ProtocoloDocumentoModelo string `json:"protocoloDocumentoModelo"`
+	Descricao                string `json:"descricao"`
+	Destinatarios            string `json:"destinatarios"`
 }
 
 // CadastrarDocumentoInterno cadastra um novo documento interno
@@ -544,22 +526,7 @@ func (c *Client) CadastrarDocumentoInterno(ctx context.Context, params DocIntern
 		return fmt.Errorf("nivel de acesso invalido: %d", params.NivelAcesso)
 	}
 
-	payload := map[string]interface{}{
-		"procedimento":               params.Procedimento,
-		"idUnidadeGeradoraProtocolo": params.IdUnidadeGeradoraProtocolo,
-		"idSerie":                    params.IdSerie,
-		"assuntos":                   params.Assuntos,
-		"interessados":               params.Interessados,
-		"observacao":                 params.Observacao,
-		"nivelAcesso":                params.NivelAcesso,
-		"idHipoteseLegal":            params.IdHipoteseLegal,
-		"idTextoPadraoInterno":       params.IdTextoPadraoInterno,
-		"protocoloDocumentoModelo":   params.ProtocoloDocumentoModelo,
-		"descricao":                  params.Descricao,
-		"destinatarios":              params.Destinatarios,
-	}
-
-	bodyBytes, err := json.Marshal(payload)
+	bodyBytes, err := json.Marshal(params)
 	if err != nil {
 		return fmt.Errorf("erro ao gerar payload: %w", err)
 	}
@@ -570,7 +537,7 @@ func (c *Client) CadastrarDocumentoInterno(ctx context.Context, params DocIntern
 	if err != nil {
 		return fmt.Errorf("erro request: %w", err)
 	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Content-Type", "application/json")
 
 	res, err := c.http.Do(req)
 	if err != nil {
@@ -602,45 +569,36 @@ func (c *Client) CadastrarDocumentoInterno(ctx context.Context, params DocIntern
 // usuario tipo utilizado na funcao AssinarBlocoDocumentos
 type BlocoDocumentosParams struct {
 	// Todos os parametros sao obrigatorios
-	arrDocumento string
-	orgao        int
-	cargo        string
-	login        string
-	senha        string
-	usuario      int
+	ArrDocumento string `json:"arrDocumento"`
+	Orgao        int    `json:"orgao"`
+	Cargo        string `json:"cargo"`
+	Login        string `json:"login"`
+	Senha        string `json:"senha"`
+	Usuario      int    `json:"ususario"`
 }
 
 // AssinarBlocoDocumentos realiza a assinatura de um ou mais documentos
 func (c *Client) AssinarBlocoDocumentos(ctx context.Context, params BlocoDocumentosParams) error {
-	if strings.TrimSpace(params.arrDocumento) == "" {
+	if strings.TrimSpace(params.ArrDocumento) == "" {
 		return fmt.Errorf("arrDocumento: texto required")
 	}
-	if params.orgao <= 0 {
-		return fmt.Errorf("orgao invalido: %d", params.orgao)
+	if params.Orgao <= 0 {
+		return fmt.Errorf("orgao invalido: %d", params.Orgao)
 	}
-	if strings.TrimSpace(params.cargo) == "" {
+	if strings.TrimSpace(params.Cargo) == "" {
 		return fmt.Errorf("cargo: texto required")
 	}
-	if strings.TrimSpace(params.login) == "" {
+	if strings.TrimSpace(params.Login) == "" {
 		return fmt.Errorf("login: texto required")
 	}
-	if strings.TrimSpace(params.senha) == "" {
+	if strings.TrimSpace(params.Senha) == "" {
 		return fmt.Errorf("senha: texto required")
 	}
-	if params.usuario <= 0 {
-		return fmt.Errorf("usuario invalido: %d", params.usuario)
+	if params.Usuario <= 0 {
+		return fmt.Errorf("usuario invalido: %d", params.Usuario)
 	}
 
-	payload := map[string]interface{}{
-		"arrDocumento": params.arrDocumento,
-		"orgao":        params.orgao,
-		"cargo":        params.cargo,
-		"login":        params.login,
-		"senha":        params.senha,
-		"usuario":      params.usuario,
-	}
-
-	bodyBytes, err := json.Marshal(payload)
+	bodyBytes, err := json.Marshal(params)
 	if err != nil {
 		return fmt.Errorf("erro ao gerar payload: %w", err)
 	}
@@ -651,7 +609,7 @@ func (c *Client) AssinarBlocoDocumentos(ctx context.Context, params BlocoDocumen
 	if err != nil {
 		return fmt.Errorf("erro request: %w", err)
 	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Content-Type", "application/json")
 
 	res, err := c.http.Do(req)
 	if err != nil {
